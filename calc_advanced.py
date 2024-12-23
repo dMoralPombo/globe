@@ -7,20 +7,19 @@ import os
 import configparser
 import glob
 import gc
-import geopandas as gpd
-from tqdm import tqdm
-import pandas as pd
-from affine import Affine
-
+import geopandas as gpd # type: ignore
+from tqdm import tqdm # type: ignore
+import pandas as pd # type: ignore
+from affine import Affine # type: ignore
+ 
 # Define main directory
 maindir = str("/media/luna/moralpom/globe/")
 archdir = str("/media/luna/archive/SATS/OPTICAL/ArcticDEM/ArcticDEM/strips/s2s041/2m/")
 os.chdir(maindir + "code/jade/")
 
-# from functions_std_archive import *
 from functions_std import *
 from functions_std import (
-    process_grid_intersections,
+    process_tile_intersections,
     clip_raster_to_cell,
     reduce_strip,
     stack,
@@ -44,9 +43,9 @@ region_name = config.get("region", "region_name")
 supertile = config.get("region", "supertile_id")
 tile_id = config.get("region", "tile_id")
 
-# Retrieve grid and strip-related values
-grid_shapefile = config.get("grid", "grid_shapefile")
-df_dir = config.get("grid", "df_dir")
+# Retrieve tile and strip-related values
+tile_shapefile = config.get("grid", "grid_shapefile")
+df_dir = config.get("tile", "df_dir")
 url_template = config.get("strip", "url_template")
 
 # Print to verify
@@ -61,9 +60,6 @@ print(f"URL Template: {url_template}")
 maindir = str("/media/luna/moralpom/globe/")
 archdir = str("/media/luna/archive/SATS/OPTICAL/ArcticDEM/ArcticDEM/strips/s2s041/2m/")
 os.chdir(maindir + "code/jade/")
-
-# Example usage
-os.makedirs(df_dir, exist_ok=True)
 
 # Define spatial resolution of the strips
 res = 2
@@ -122,8 +118,6 @@ subtiles = ["1_1", "1_2", "2_1", "2_2"]
 for supertile in supertiles:
     for subtile in subtiles:
         tile = f"{supertile}_{subtile}"
-        # subtile = tile[-3:]
-        # supertile = tile[:5]
         tile_id = tile + "_2m_v4.1"
 
         # Temporary files for the clipped mosaic/stripDEMs
@@ -137,34 +131,40 @@ for supertile in supertiles:
 
         if tile_row.shape[0] == 1:
             print(f"Processing tile: {tile}\n\n\n\n\n\n")
-            grid_coords = tile_row.iloc[0]["geometry"]
-            grid_bounds = grid_coords.bounds
-            grid_bounds_mod = (
-                grid_bounds[0] + 100,
-                grid_bounds[1] + 100,
-                grid_bounds[2] - 100,
-                grid_bounds[3] - 100,
+
+            # Get the bounds of the tile cell
+            tile_coords = tile_row.iloc[0]["geometry"]
+            tile_bounds = tile_coords.bounds
+
+            # Crop the tile bounds to avoid overlapping between tiles
+            tile_bounds_mod = (
+                tile_bounds[0] + 100,
+                tile_bounds[1] + 100,
+                tile_bounds[2] - 100,
+                tile_bounds[3] - 100,
             )
-            grid_bounds = grid_bounds_mod
+            tile_bounds = tile_bounds_mod
             #################################################################
             # This section imports the list of "intersecting" StripDEMs
-            # (or creates it if it had not been already done)
+            # (or creates it, if it had not been already done)
 
-            intersect_dems_df = process_grid_intersections(
+            intersect_dems_df = process_tile_intersections(
                 tile=tile,
                 strip_index_gdf=strip_index_gdf,
                 archdir=archdir,
             )
 
             if intersect_dems_df.empty:
-                print("intersect_dems_df is empty. Skip")
+                print("intersect_dems_df is empty (No StripDEMs in this tile).\
+                      \n Skip")
+                break
 
             print("intersect_dems_df loaded - NOT empty")
 
             if download_only is True:
                 continue
             else:
-                # Set file path for grid shapefile and dataframe storage
+                # Set file path for tile shapefile and dataframe storage
                 df_dir = (
                     maindir
                     + f"data/ArcticDEM/ArcticDEM_stripfiles/{supertile}/df_csvs/"
@@ -174,11 +174,11 @@ for supertile in supertiles:
                 if not os.path.exists(df_dir):
                     os.makedirs(df_dir)
 
-                # Read the grid shapefile and its CRS
-                grid_extent = gpd.GeoDataFrame(
-                    {"geometry": [grid_coords]}, crs="EPSG:3413"
+                # Read the tile shapefile and its CRS
+                tile_extent = gpd.GeoDataFrame(
+                    {"geometry": [tile_coords]}, crs="EPSG:3413"
                 )
-                x0, y0, x1, y1 = grid_bounds
+                x0, y0, x1, y1 = tile_bounds
 
                 mosaic_dem = (
                     maindir + "data/ArcticDEM/mosaic/arcticdem_mosaic_100m_v4.1_dem.tif"
@@ -186,9 +186,9 @@ for supertile in supertiles:
                 mosaic_dem = f"/media/luna/archive/SATS/OPTICAL/ArcticDEM/ArcticDEM/mosaic/v4.1/2m/{supertile}/{tile_id}_dem.tif"
                 diffndv = -9999
                 mosaic_clipped_fn = clip_raster_to_cell(
-                    mosaic_dem, grid_bounds, mosaic_dir, diffndv
+                    mosaic_dem, tile_bounds, mosaic_dir, diffndv
                 )
-                print("mosaic clipped to grid_bounds")
+                print("mosaic clipped to tile_bounds")
 
                 intersect_dems_df = intersect_dems_df.sort_values(
                     "Acq_date"
@@ -293,7 +293,7 @@ for supertile in supertiles:
 
                             diff_stats, mean_r2, rmse, proc_file = reduce_strip(
                                 strip_name,
-                                grid_bounds,
+                                tile_bounds,
                                 strips_dir,
                                 mosaic_clipped_fn,
                                 geocell_i,
@@ -393,7 +393,7 @@ for supertile in supertiles:
                     stack(
                         stackarrays,
                         tile,
-                        grid_bounds,
+                        tile_bounds,
                         "no",
                         transform=transform,
                     )
