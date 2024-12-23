@@ -715,6 +715,15 @@ def stack(
         transform (_type_,): _description_. Defaults to None.
         plot_every_n (int, optional): frequency of plotting. Defaults to 10.
     """
+    # Get the tile bounds (x0, y0, x1, y1)
+    x0, y0, x1, y1 = tile_bounds
+
+    # Generate the extent (coordinates for the axes)
+    extent = [x0, y0, x1, y1]
+
+    # Pre-calculate affine transformation
+    transform = Affine(2.0, 0.0, x0, 0.0, -2.0, y1)
+
     cellshape = (25000, 25000)
 
     if not stackarrays:
@@ -731,12 +740,6 @@ def stack(
     ndems_raster_path = os.path.join(resultsdir, f"{tile}_20_ndems.tif")
     meandems_raster_path = os.path.join(resultsdir, f"{tile}_20_mean.tif")
     std_raster_path = os.path.join(resultsdir, f"{tile}_20_stdev.tif")
-
-    # Extract bounds
-    xmin, ymin, xmax, ymax = tile_bounds
-
-    # Generate the extent (coordinates for the axes)
-    extent = [xmin, xmax, ymin, ymax]
 
     # Initialize running totals
     running_sum, running_squared_sum, valid_count = initialise_running_totals(cellshape)

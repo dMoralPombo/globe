@@ -1,6 +1,9 @@
 """
-This is a script to calculate STD maps of a supertile including all
-possible DEMs.
+This is a script to calculate STD maps of a tile including all
+intersecting DEMs whose STD is less than a threshold value.
+The script will download the DEMs, clip them to the tile bounds,
+and calculate the difference between the DEM and the reference DEM (mosaic), 
+and then compute statistics on the differences.
 """
 
 import os
@@ -44,7 +47,7 @@ supertile = config.get("region", "supertile_id")
 tile_id = config.get("region", "tile_id")
 
 # Retrieve tile and strip-related values
-tile_shapefile = config.get("grid", "grid_shapefile")
+grid_shapefile = config.get("grid", "grid_shapefile")
 df_dir = config.get("tile", "df_dir")
 url_template = config.get("strip", "url_template")
 
@@ -112,8 +115,11 @@ supertiles = [
 ]
 
 # supertiles = ["22_38"]
-# Add more supertiles as needed
 subtiles = ["1_1", "1_2", "2_1", "2_2"]
+
+# Define the threshold for filtering out StripDEMs by std
+threshold = 20 # Default value
+#threshold = float(input('Enter the threshold for filtering out StripDEMs by std: '))
 
 for supertile in supertiles:
     for subtile in subtiles:
@@ -158,8 +164,8 @@ for supertile in supertiles:
                 print("intersect_dems_df is empty (No StripDEMs in this tile).\
                       \n Skip")
                 break
-
-            print("intersect_dems_df loaded - NOT empty")
+            else:
+                print("intersect_dems_df loaded - NOT empty")
 
             if download_only is True:
                 continue
@@ -174,17 +180,14 @@ for supertile in supertiles:
                 if not os.path.exists(df_dir):
                     os.makedirs(df_dir)
 
-                # Read the tile shapefile and its CRS
-                tile_extent = gpd.GeoDataFrame(
-                    {"geometry": [tile_coords]}, crs="EPSG:3413"
-                )
-                x0, y0, x1, y1 = tile_bounds
-
+                # Set file path for mosaic DEM
                 mosaic_dem = (
                     maindir + "data/ArcticDEM/mosaic/arcticdem_mosaic_100m_v4.1_dem.tif"
                 )
                 mosaic_dem = f"/media/luna/archive/SATS/OPTICAL/ArcticDEM/ArcticDEM/mosaic/v4.1/2m/{supertile}/{tile_id}_dem.tif"
                 diffndv = -9999
+
+                # Clip the mosaic DEM to the tile bounds
                 mosaic_clipped_fn = clip_raster_to_cell(
                     mosaic_dem, tile_bounds, mosaic_dir, diffndv
                 )
@@ -245,8 +248,8 @@ for supertile in supertiles:
                         "acqdate"
                     )  # Sort dataframe in ascending date order
 
-                    last_stored = df_stats["filename"].iloc[-1]
                     # Find where to restart in sorted_savename_nofilt
+                    last_stored = df_stats["filename"].iloc[-1]
                     try:
                         start_index = (
                             sorted_savename_nofilt.index(last_stored) + 1
@@ -358,23 +361,20 @@ for supertile in supertiles:
 
                 # Save remaining data to CSV file after loop ends
                 df_stats.to_csv(output_stats_file, mode="w", index=False)
-                print("df_stats saved definitely.")
-                print(df_stats)
-                # Export statistics to csv file - you might want to find a way to do this separately as it is super slow
-                # - I ran out of time to make it more efficient
-                # may want to split code here and read the csvs created via the last line, should speed up the code
-
+                print("df_stats saved definitely. \n\n ",
+                      df_stats)
+                
                 # Filter DSMs that are less than threshold = 50 sigma dh (originally it was 20 sigma)
-                spread_filtered_df_50 = df_stats[df_stats["std_dh"] < 50]
-                spread_filtered_df_50 = spread_filtered_df_50.drop_duplicates()
-                print(f"Length of spread_filtered_df_20: {len(spread_filtered_df_50)}")
+                spread_filtered_df = df_stats[df_stats["std_dh"] < threshold]
+                spread_filtered_df = spread_filtered_df.drop_duplicates()
+                print(f"Length of spread_filtered_df_20: {len(spread_filtered_df)}")
 
                 all_arrays = glob.glob(
                     os.path.join(temp_dir_filledarrays, "masked_arr_W*.npy")
                 )
 
                 # Get the core filenames from the dataframe
-                valid_cores = spread_filtered_df_50["filename"].tolist()
+                valid_cores = spread_filtered_df["filename"].tolist()
 
                 # Filter files in the directory
                 stackarrays = [
@@ -386,16 +386,12 @@ for supertile in supertiles:
                     in valid_cores
                 ]
 
-                # Pre-calculate affine transformation
-                transform = Affine(2.0, 0.0, x0, 0.0, -2.0, y1)
-
                 if stackarrays:
                     stack(
                         stackarrays,
                         tile,
                         tile_bounds,
                         "no",
-                        transform=transform,
                     )
                 else:
                     print("stackarrays is empty")
