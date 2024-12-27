@@ -1,9 +1,13 @@
 """
-This is a script to calculate STD maps of a tile including all
-intersecting DEMs whose STD is less than a threshold value.
-The script will download the DEMs, clip them to the tile bounds,
-and calculate the difference between the DEM and the reference DEM (mosaic), 
-and then compute statistics on the differences.
+Calculate STD maps of a tile including all intersecting DEMs whose STD is less than a threshold value.
+
+The script will download the DEMs, clip them to the tile bounds, calculate the difference between the DEM and the reference DEM (mosaic), and then compute statistics on the differences.
+
+Parameters:
+    None
+
+Returns:
+    None
 """
 
 import os
@@ -16,9 +20,8 @@ import pandas as pd # type: ignore
 from affine import Affine # type: ignore
  
 # Define main directory
-maindir = str("/media/luna/moralpom/globe/")
-archdir = str("/media/luna/archive/SATS/OPTICAL/ArcticDEM/ArcticDEM/strips/s2s041/2m/")
-os.chdir(maindir + "github_ready/globe/")
+# maindir = str("/media/luna/moralpom/globe/")
+# archdir = str("/media/luna/archive/SATS/OPTICAL/ArcticDEM/ArcticDEM/strips/s2s041/2m/")
 
 from functions_std import *
 from functions_std import (
@@ -53,7 +56,6 @@ url_template = config.get("strip", "url_template")
 
 # Retrieve stats column names
 stats_columns = config.get("stats", "stats_columns").split(",")
-# Convert stats_columns to list of strings without whitespace or "\n" or quotes:
 stats_columns = [column.strip() for column in stats_columns]    
 
 # Print to verify
@@ -67,7 +69,6 @@ print(f"URL Template: {url_template}")
 # Define main directory
 maindir = str("/media/luna/moralpom/globe/")
 archdir = str("/media/luna/archive/SATS/OPTICAL/ArcticDEM/ArcticDEM/strips/s2s041/2m/")
-os.chdir(maindir + "code/jade/")
 
 # Define spatial resolution of the strips
 res = 2
@@ -95,8 +96,10 @@ subtiles = ["1_1", "1_2", "2_1", "2_2"]
 
 # Define the threshold for filtering out StripDEMs by std
 threshold = float(input('Enter the threshold for filtering out StripDEMs by std: '))
-if threshold is None:
-    threshold = 20 # Default value
+if not threshold:
+except ValueError:
+    print("Invalid input. Using default threshold value of 20.")
+    threshold = 20  # Default value
 
 for supertile in supertiles:
     for subtile in subtiles:
@@ -158,9 +161,6 @@ for supertile in supertiles:
                     os.makedirs(df_dir)
 
                 # Set file path for mosaic DEM
-                mosaic_dem = (
-                    maindir + "data/ArcticDEM/mosaic/arcticdem_mosaic_100m_v4.1_dem.tif"
-                )
                 mosaic_dem = f"/media/luna/archive/SATS/OPTICAL/ArcticDEM/ArcticDEM/mosaic/v4.1/2m/{supertile}/{tile_id}_dem.tif"
                 diffndv = -9999
 
@@ -302,9 +302,12 @@ for supertile in supertiles:
                                         f"Checkpoint: Saved progress at {strip_name}."
                                     )
 
-                        except IndexError:
-                            print("\nFile not downloaded yet... Continue (/) \n")
-                            break
+                        except IndexError as e:
+                            if "list index out of range" in str(e):
+                                print("\nFile not downloaded yet... Continue (/) \n")
+                                break
+                            else:
+                                raise
 
                         # Cleaning the variables for memory:
                         diff_stats = []
