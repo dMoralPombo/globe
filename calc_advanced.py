@@ -95,7 +95,7 @@ subtiles = ["1_1", "1_2", "2_1", "2_2"]
 
 # Define the threshold for filtering out StripDEMs by std
 threshold = float(input('Enter the threshold for filtering out StripDEMs by std: '))
-if threshold = None:
+if threshold is None:
     threshold = 20 # Default value
 
 for supertile in supertiles:
