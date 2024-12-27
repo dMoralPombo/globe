@@ -1,4 +1,4 @@
-# GLOBE (Greenland Observatory for Subglacial Lakes)
+# GLOBE (Greenland Subglacial Lakes Observatory)
 Repository for the GLOBE project's related code.
 
 
