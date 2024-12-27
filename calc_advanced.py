@@ -18,7 +18,7 @@ from affine import Affine # type: ignore
 # Define main directory
 maindir = str("/media/luna/moralpom/globe/")
 archdir = str("/media/luna/archive/SATS/OPTICAL/ArcticDEM/ArcticDEM/strips/s2s041/2m/")
-os.chdir(maindir + "code/jade/")
+os.chdir(maindir + "github_ready/globe/")
 
 from functions_std import *
 from functions_std import (
@@ -47,9 +47,14 @@ supertile = config.get("region", "supertile_id")
 tile_id = config.get("region", "tile_id")
 
 # Retrieve tile and strip-related values
-grid_shapefile = config.get("grid", "grid_shapefile")
+grid_shapefile = config.get("tile", "grid_shapefile")
 df_dir = config.get("tile", "df_dir")
 url_template = config.get("strip", "url_template")
+
+# Retrieve stats column names
+stats_columns = config.get("stats", "stats_columns").split(",")
+# Convert stats_columns to list of strings without whitespace or "\n" or quotes:
+stats_columns = [column.strip() for column in stats_columns]    
 
 # Print to verify
 print(f"Main Directory: {maindir}")
@@ -83,43 +88,15 @@ strip_index_gdf = strip_index_gdf.to_crs("EPSG:3413")
 mosaic_index_path = "/media/luna/moralpom/globe/data/ArcticDEM/mosaic/ArcticDEM_Mosaic_Index_latest_shp/ArcticDEM_Mosaic_Index_v4_1_2m.shp"
 # mosaic_index_path = f"/media/luna/archive/SATS/OPTICAL/ArcticDEM/ArcticDEM/mosaic/v4.1/2m/{supertile}/index/{tile}_2m_v4.1_index.shp"
 mosaic_index_gdf = gpd.read_file(mosaic_index_path)
-supertiles = [
-    "07_41",
-    "08_41",
-    "09_41",
-    "10_41",
-    "11_41",
-    "12_41",
-    "13_41",
-    "14_41",
-    "15_41",
-    "16_41",
-    "17_41",
-    "18_41",
-    "19_41",
-    "20_41",
-    "21_41",
-    "22_41",
-    "23_41",
-    "24_41",
-    "25_41",
-    "26_41",
-    "27_41",
-    "28_41",
-    "29_41",
-    "30_41",
-    "31_41",
-    "32_41",
-    "33_41",
-    "34_41",
-]
+supertiles = input("Enter the supertile(s) to process (e.g. '22_31, 22_32'): ").split(",")
+supertiles = [supertile.strip() for supertile in supertiles]
 
-# supertiles = ["22_38"]
 subtiles = ["1_1", "1_2", "2_1", "2_2"]
 
 # Define the threshold for filtering out StripDEMs by std
-threshold = 20 # Default value
-#threshold = float(input('Enter the threshold for filtering out StripDEMs by std: '))
+threshold = float(input('Enter the threshold for filtering out StripDEMs by std: '))
+if threshold = None:
+    threshold = 20 # Default value
 
 for supertile in supertiles:
     for subtile in subtiles:
@@ -211,28 +188,6 @@ for supertile in supertiles:
                 # This section imports georeferenced DSM, resamples the georeferenced DSM
                 # (to match reference DSM - ArcticDEM 100m mosaic),
                 # calculates difference between reference DSM, and exports important statistics
-
-                stats_columns = [
-                    "filename",
-                    "acqdate",
-                    "geocell",
-                    "count",
-                    "mean",
-                    "min_dh",
-                    "max_dh",
-                    "mean_dh",
-                    "std_dh",
-                    "med_dh",
-                    "mad_dh",
-                    "q1_dh",
-                    "q2_dh",
-                    "iqr_dh",
-                    "mode_dh",
-                    "p16_dh",
-                    "p84_dh",
-                    "spread_dh",
-                    "rmse_dh",
-                ]
 
                 # Loading stats_file
                 output_stats_file = df_dir + str(tile) + "_stats_df_2m_gbmod.csv"
