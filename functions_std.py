@@ -40,6 +40,7 @@ from natsort import natsorted  # Natural sorting for filenames
 import contextily as cx
 from geodatasets import get_path
 from matplotlib.patches import Rectangle
+import configparser
 
 # Define main directory
 maindir = str("/media/luna/moralpom/globe/")
@@ -1198,3 +1199,375 @@ def download_file(geocell_folder, url):
         print(f"Downloaded to {geocell_folder}\n from URL {url}")
     except subprocess.CalledProcessError as e:
         print(f"Failed to download: {url}, error: {e}")
+
+######################################################################
+def configuration():
+    
+    # Read config
+    config = configparser.ConfigParser()
+    config.read("config.cfg")
+
+    # Retrieve paths
+    maindir = config.get("paths", "maindir")
+    archdir = config.get("paths", "archdir")
+    supertile_dir = config.get("paths", "supertile_dir")
+    stripfiles_dir = config.get("paths", "stripfiles_dir")
+
+    # Retrieve region-specific values
+    region_name = config.get("region", "region_name")
+    supertile = config.get("region", "supertile_id")
+    tile_id = config.get("region", "tile_id")
+
+    # Retrieve tile and strip-related values
+    grid_shapefile = config.get("tile", "grid_shapefile")
+    df_dir = config.get("tile", "df_dir")
+    url_template = config.get("strip", "url_template")
+
+    # Retrieve stats column names
+    stats_columns = config.get("stats", "stats_columns").split(",")
+    stats_columns = [column.strip() for column in stats_columns]    
+
+    # Print to verify
+    print(f"Main Directory: {maindir}")
+    print(f"Region: {region_name}")
+    # print(f"SuperTile ID: {supertile}")
+    print(f"Grid Shapefile: {grid_shapefile}")
+    print(f"Output Directory for CSVs: {df_dir}")
+    print(f"URL Template: {url_template}")
+
+    # Define main directory
+    maindir = str("/media/luna/moralpom/globe/")
+    archdir = str("/media/luna/archive/SATS/OPTICAL/ArcticDEM/ArcticDEM/strips/s2s041/2m/")
+
+    # Define spatial resolution of the strips
+    res = 2
+
+    # No data value, 0 will give odd outputs
+    diffndv = -9999
+
+    # Load the stripfile shapefile
+    strip_index_path = (
+        maindir
+        + "data/ArcticDEM/ArcticDEM_Strip_Index_latest_shp/ArcticDEM_Strip_Index_s2s041.shp"
+    )
+    strip_index_gdf = gpd.read_file(strip_index_path)
+    # Reproject the strip GeoDataFrame to the desired CRS (EPSG:3413)
+    strip_index_gdf = strip_index_gdf.to_crs("EPSG:3413")
+
+    # Load the mosaic shapefile
+    mosaic_index_path = "/media/luna/moralpom/globe/data/ArcticDEM/mosaic/ArcticDEM_Mosaic_Index_latest_shp/ArcticDEM_Mosaic_Index_v4_1_2m.shp"
+    # mosaic_index_path = f"/media/luna/archive/SATS/OPTICAL/ArcticDEM/ArcticDEM/mosaic/v4.1/2m/{supertile}/index/{tile}_2m_v4.1_index.shp"
+    mosaic_index_gdf = gpd.read_file(mosaic_index_path)
+    
+    return maindir, archdir, res, diffndv, strip_index_gdf, mosaic_index_gdf, stats_columns
+
+######################################################################
+def intersection(supertile, subtile, strip_index_gdf, mosaic_index_gdf):
+    """
+    Computes the intersection between a the StripDEMs and the mosaic in a subtile.
+
+    Args:
+        supertile (str): Identifier for the supertile.
+        subtile (str): Identifier for the subtile.
+        strip_index_gdf (GeoDataFrame): GeoDataFrame containing strip index information.
+        mosaic_index_gdf (GeoDataFrame): GeoDataFrame containing mosaic index information.
+
+    Returns:
+        tuple: Contains the tile identifier, tile coordinates, tile bounds, and DataFrame of intersecting DEMs.
+    """
+
+    tile = f"{supertile}_{subtile}"
+    tile_id = tile + "_2m_v4.1"
+
+    # Temporary files for the clipped mosaic/stripDEMs
+    mosaic_dir = maindir + f"data/ArcticDEM/mosaic/temp/{tile}/"
+    strips_dir = maindir + f"data/ArcticDEM/temp2/{tile}/"
+
+    try:
+        tile_row = mosaic_index_gdf[mosaic_index_gdf["dem_id"] == tile_id]
+    except KeyError:
+        tile_row = mosaic_index_gdf[mosaic_index_gdf["DEM_ID"] == tile_id]
+
+    if tile_row.shape[0] == 1:
+        print(f"Processing tile: {tile}\n\n\n\n\n\n")
+
+        # Get the bounds of the tile cell
+        tile_coords = tile_row.iloc[0]["geometry"]
+        tile_bounds = tile_coords.bounds
+
+        # Crop the tile bounds to avoid overlapping between tiles
+        tile_bounds_mod = (
+            tile_bounds[0] + 100,
+            tile_bounds[1] + 100,
+            tile_bounds[2] - 100,
+            tile_bounds[3] - 100,
+        )
+        tile_bounds = tile_bounds_mod
+        #################################################################
+        # This section imports the list of "intersecting" StripDEMs
+        # (or creates it, if it had not been already done)
+
+        intersect_dems_df = process_tile_intersections(
+            tile=tile,
+            strip_index_gdf=strip_index_gdf,
+            archdir=archdir,
+        )
+
+        if intersect_dems_df.empty:
+            print("intersect_dems_df is empty (No StripDEMs in this tile).\
+                    \n Skip")
+            return None
+        else:
+            print("intersect_dems_df loaded - NOT empty")
+
+    else:
+        print(f"Tile {tile} not found in the mosaic index. Skipping...")
+    
+    return tile, tile_coords, tile_bounds, intersect_dems_df
+
+######################################################################
+def stats_calculator(supertile, subtile, tile_bounds, intersect_dems_df, strip_index_gdf, mosaic_index_gdf, mosaic_dir, strips_dir, stats_columns):
+    """
+    This function computes the statistics for a tile.
+
+        Parameters:
+        supertile (str): The identifier for the supertile.
+        subtile (str): The identifier for the subtile.
+        tile_bounds (tuple): The geographical bounds of the tile.
+        intersect_dems_df (pd.DataFrame): DataFrame containing intersecting DEMs information.
+        strip_index_gdf (gpd.GeoDataFrame): GeoDataFrame containing strip index information.
+        mosaic_index_gdf (gpd.GeoDataFrame): GeoDataFrame containing mosaic index information.
+        mosaic_dir (str): Directory path where mosaic DEMs are stored.
+        strips_dir (str): Directory path where strip DEMs are stored.
+        stats_columns (list): List of column names for the statistics DataFrame.
+
+        Returns:
+        pd.DataFrame: DataFrame containing the computed statistics for the tile.
+
+    """
+    tile = f"{supertile}_{subtile}"
+    tile_id = tile + "_2m_v4.1"
+
+    # Set file path for tile shapefile and dataframe storage
+    df_dir = (
+        maindir
+        + f"data/ArcticDEM/ArcticDEM_stripfiles/{supertile}/df_csvs/"
+    )
+
+    # Ensure the dataframe directory exists
+    if not os.path.exists(df_dir):
+        os.makedirs(df_dir)
+
+    # Set file path for mosaic DEM
+    mosaic_dem = f"/media/luna/archive/SATS/OPTICAL/ArcticDEM/ArcticDEM/mosaic/v4.1/2m/{supertile}/{tile_id}_dem.tif"
+    diffndv = -9999
+
+    # Clip the mosaic DEM to the tile bounds
+    mosaic_clipped_fn = clip_raster_to_cell(
+        mosaic_dem, tile_bounds, mosaic_dir, diffndv
+    )
+    print("mosaic clipped to tile_bounds")
+
+    intersect_dems_df = intersect_dems_df.sort_values(
+        "Acq_date"
+    )  # Sort dataframe in ascending date order
+    intersect_dems_df.reset_index(inplace=True)  # Reset the index
+    sorted_savename_nofilt = intersect_dems_df[
+        "Strip_name"
+    ].tolist()  # Make list of sorted filenames
+    sorted_geocell_nofilt = intersect_dems_df[
+        "Geocell"
+    ].tolist()  # Make list of sorted geocells
+    date_nofilt = intersect_dems_df[
+        "Acq_date"
+    ].tolist()  # Make list of sorted dates
+
+    ##############################################################################
+    # This section imports georeferenced DSM, resamples the georeferenced DSM
+    # (to match reference DSM - ArcticDEM 100m mosaic),
+    # calculates difference between reference DSM, and exports important statistics
+
+    # Loading stats_file
+    output_stats_file = df_dir + str(tile) + "_stats_df_2m.csv"
+
+    # Try to access diff_stats CSV if it was created already:
+    if os.path.exists(output_stats_file):
+        print(
+            f"Loading existing Statistics DataFrame from \n{output_stats_file}"
+        )
+        df_stats = pd.read_csv(output_stats_file)
+        df_stats = df_stats.drop_duplicates(subset=["filename"])
+        df_stats = df_stats.sort_values(
+            "acqdate"
+        )  # Sort dataframe in ascending date order
+
+        # Find where to restart in sorted_savename_nofilt
+        last_stored = df_stats["filename"].iloc[-1]
+        try:
+            start_index = (
+                sorted_savename_nofilt.index(last_stored) + 1
+            )  # Continue from next file
+            print(f"Resuming from index {start_index}...")
+        except ValueError:
+            print(
+                "Last processed strip not found in the list. Starting from scratch."
+            )
+            start_index = 0
+    else:
+        print("No existing DataFrame found, processing from scratch...")
+        df_stats = pd.DataFrame(
+            columns=stats_columns
+        )  # Create a new DataFrame with the defined columns
+        # Create empty lists for the stack and statistics
+        start_index = 0
+
+    print(
+        "---- " + str(len(sorted_savename_nofilt)) + " files"
+    )  # len = length
+    temp_dir_filledarrays = f"/media/luna/moralpom/globe/data/ArcticDEM/temp/filled_arrays/{tile}/masked/"
+    os.makedirs(temp_dir_filledarrays, exist_ok=True)
+
+    for item, strip_name in tqdm(
+        enumerate(sorted_savename_nofilt[start_index:], start=start_index)
+    ):
+        # Check if strip_name already exists in df_stats to skip reprocessing
+        if strip_name in df_stats["filename"].values:
+            print(f"Skipping {strip_name}, already processed.")
+            continue  # Skip to the next strip if already processed
+        else:
+            try:
+                geocell_i = sorted_geocell_nofilt[item]
+                date_nofilt_i = date_nofilt[item]
+
+                print(
+                    str(item)
+                    + "/"
+                    + str(len(sorted_savename_nofilt))
+                    + " files"
+                )
+                print(strip_name)
+
+                diff_stats, mean_r2, rmse, proc_file = reduce_strip(
+                    strip_name,
+                    tile_bounds,
+                    strips_dir,
+                    mosaic_clipped_fn,
+                    geocell_i,
+                    diffndv,
+                    plotting=False,
+                    temp_dir=temp_dir_filledarrays,
+                )
+
+                if (
+                    type(diff_stats) is tuple
+                ):  # In case there is overlap (most of the times)
+                    new_row_stats = pd.DataFrame(
+                        [
+                            [
+                                strip_name,
+                                date_nofilt_i,
+                                geocell_i,
+                                diff_stats[0],
+                                mean_r2,
+                                diff_stats[1],
+                                diff_stats[2],
+                                diff_stats[3],
+                                diff_stats[4],
+                                diff_stats[5],
+                                diff_stats[6],
+                                diff_stats[7],
+                                diff_stats[8],
+                                diff_stats[9],
+                                diff_stats[10],
+                                diff_stats[11],
+                                diff_stats[12],
+                                diff_stats[13],
+                                rmse,
+                            ]
+                        ],
+                        columns=df_stats.columns,
+                    )
+                    df_stats = pd.concat(
+                        [df_stats, new_row_stats], ignore_index=True
+                    )
+
+                    # Save to DataFrame periodically (every 10 strips, for example)
+                    if item % 10 == 0:
+                        df_stats.to_csv(
+                            output_stats_file, mode="w", index=False
+                        )  # Save the updated DataFrame to the CSV file
+                        print(
+                            f"Checkpoint: Saved progress at {strip_name}."
+                        )
+
+            except IndexError as e:
+                if "list index out of range" in str(e):
+                    print("\nFile not downloaded yet... Continue (/) \n")
+                    return None
+                else:
+                    raise
+
+            # Cleaning the variables for memory:
+            diff_stats = []
+            rmse = []
+            mean_r2 = []
+            new_row_stats = []
+
+            del diff_stats, rmse, mean_r2, new_row_stats
+
+    # Save remaining data to CSV file after loop ends
+    df_stats.to_csv(output_stats_file, mode="w", index=False)
+    print("df_stats saved definitely. \n\n ",
+            df_stats)
+    
+    # Make sure to delete the temporary files after processing
+    if os.path.exists(mosaic_clipped_fn):
+        os.remove(mosaic_clipped_fn)
+
+    return df_stats
+
+######################################################################
+def stackador(df_stats, threshold, tile, tile_bounds):
+    """
+    Filters and stacks arrays based on a threshold and tile information.
+
+        df_stats (pd.DataFrame): DataFrame containing statistics with a column "std_dh" for standard deviation of height differences and a column "filename" for core filenames.
+        threshold (float): Threshold value for filtering the standard deviation of height differences.
+        tile (str): Tile identifier used in directory paths.
+        tile_bounds (tuple): Bounds of the tile used in the stacking process.
+
+    Returns:
+        None
+    """
+    # Filter DSMs that are less than threshold = 50 sigma dh (originally it was 20 sigma)
+    spread_filtered_df = df_stats[df_stats["std_dh"] < threshold]
+    spread_filtered_df = spread_filtered_df.drop_duplicates()
+    print(f"Length of spread_filtered_df_20: {len(spread_filtered_df)}")
+    temp_dir_filledarrays = f"/media/luna/moralpom/globe/data/ArcticDEM/temp/filled_arrays/{tile}/masked/"
+
+    all_arrays = glob.glob(
+        os.path.join(temp_dir_filledarrays, "masked_arr_W*.npy")
+    )
+
+    # Get the core filenames from the dataframe
+    valid_cores = spread_filtered_df["filename"].tolist()
+
+    # Filter files in the directory
+    stackarrays = [
+        file
+        for file in all_arrays
+        if os.path.basename(file)
+        .removeprefix("masked_arr_")
+        .removesuffix(".npy")
+        in valid_cores
+    ]
+
+    if stackarrays:
+        stack(
+            stackarrays,
+            tile,
+            tile_bounds,
+            "no",
+        )
+    else:
+        print("stackarrays is empty")
