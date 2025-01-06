@@ -1,16 +1,21 @@
 """
 Calculate STD maps of a tile including all intersecting DEMs whose STD 
-is less than a threshold value.
+is less than a threshold value, using the functions from functions_std.py.
 
 The script will download the DEMs, clip them to the tile bounds, calculate
 the difference between the DEM and the reference DEM (mosaic), and then 
 compute statistics on the differences.
 
 Parameters:
+    download_only (bool): Flag to determine if only downloading is required.
+    supertiles (list): List of supertiles to process.
+    subtiles (list): List of subtiles to process.
+    threshold (float): Threshold for filtering out StripDEMs by std.
     
 
 Returns:
-    None
+    rasters (GeoTIFF): Rasters of the STD maps for each tile, number of DEMs and
+    average elevation, and its corresponding JPEG images.   
 """
 
 import os
