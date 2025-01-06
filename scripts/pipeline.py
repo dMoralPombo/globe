@@ -20,14 +20,14 @@ def main():
         threshold = 20  # Default value
     for supertile in supertiles:
         for subtile in subtiles:
-            intersection(supertile, subtile, strip_index_gdf, mosaic_index_gdf)
+            #intersection(supertile, subtile, strip_index_gdf, mosaic_index_gdf, archdir)
             tile = f"{supertile}_{subtile}"
             tile_id = tile + "_2m_v4.1"
 
             mosaic_dir = maindir + f"data/ArcticDEM/mosaic/temp/{tile}/"
             strips_dir = maindir + f"data/ArcticDEM/temp2/{tile}/"
             
-            tile, tile_coords, tile_bounds, intersect_dems_df = intersection(supertile, subtile, strip_index_gdf, mosaic_index_gdf)
+            tile, tile_coords, tile_bounds, intersect_dems_df = intersection(supertile, subtile, strip_index_gdf, mosaic_index_gdf, archdir)
 
             if download_only is False:
                 df_stats = stats_calculator(supertile, subtile, tile_bounds, intersect_dems_df, strip_index_gdf, mosaic_index_gdf, mosaic_dir, strips_dir, stats_columns)

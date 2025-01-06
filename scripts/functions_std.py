@@ -1316,7 +1316,7 @@ def configuration():
     return maindir, archdir, res, diffndv, strip_index_gdf, mosaic_index_gdf, stats_columns
 
 ######################################################################
-def intersection(supertile, subtile, strip_index_gdf, mosaic_index_gdf):
+def intersection(supertile, subtile, strip_index_gdf, mosaic_index_gdf, archdir):
     """
     Computes the intersection between a the StripDEMs and the mosaic in a subtile.
 
