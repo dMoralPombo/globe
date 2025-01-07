@@ -964,7 +964,7 @@ def process_tile_intersections(
     os.makedirs(df_dir, exist_ok=True)
     intersection_df_path = os.path.join(df_dir, f"{tile}_df.csv")
     print(
-        f"\n\n\n\nPART 1: FINDING INTERSECTING DEMS (for tile {tile}\ntile_bounds: {tile_bounds}.\n\n\n\n"
+        f"\n\n\n\nPART 1: FINDING INTERSECTING DEMS (for tile {tile})\ntile_bounds: {tile_bounds}.\n\n\n\n"
     )
 
     if os.path.exists(intersection_df_path):
@@ -1013,7 +1013,7 @@ def process_tile_intersections(
 ######################################################################
 
 
-def check_intersection(strip_geom, tile_coords):
+def check_intersection_og(strip_geom, tile_coords):
     """
     Checks if a strip geometry intersects with the tile coordinates.
 
@@ -1030,6 +1030,45 @@ def check_intersection(strip_geom, tile_coords):
         return any(poly.intersects(tile_coords) for poly in strip_geom.geoms)
     return False
 
+def check_intersection(strip_geom, tile_coords, area_threshold=0.01):
+    """
+    Checks if a strip geometry intersects with the tile coordinates and if
+    the overlapping area exceeds a threshold.
+
+    Parameters:
+        strip_geom (Polygon or MultiPolygon): Geometry of the strip.
+        tile_coords (Polygon): tile cell geometry.
+        area_threshold (float): Minimum overlapping area (as a fraction of the tile area) 
+                                required to include the strip.
+
+    Returns:
+        bool: True if intersects and the overlapping area meets the threshold, False otherwise.
+
+    """
+    tile_area = tile_coords.area  # Total area of the tile
+
+    if isinstance(strip_geom, Polygon):
+        overlap_geom = strip_geom.intersection(tile_coords)
+
+        #return strip_geom.intersects(tile_coords)
+    elif isinstance(strip_geom, MultiPolygon):
+        overlap_geom = MultiPolygon(
+            [poly.intersection(tile_coords) for poly in strip_geom.geoms]
+        ).buffer(0)  # Buffer(0) fixes potential invalid geometries
+        #return any(poly.intersects(tile_coords) for poly in strip_geom.geoms)
+    else:
+        return False
+    
+    # Calculate the overlapping area
+    overlap_area = overlap_geom.area
+
+    # Check if the overlapping area exceeds the threshold
+    fraction = overlap_area / tile_area
+    if fraction >= area_threshold:
+        print(f"Overlap area: {overlap_area}, Fraction: {fraction}")
+        return True
+    else:
+        return False
 
 ######################################################################
 
