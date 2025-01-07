@@ -3,7 +3,7 @@ This module contains the pipeline script for the project.
 
 """
 
-from functions_std import *
+from scripts.functions_std import *
 
 def main():
     download_only = not bool(input("Download only? (Enter for YES)   "))
