@@ -55,40 +55,40 @@ Functions:
 
 import os
 import sys
-import geopandas as gpd
-from shapely.geometry import shape, mapping, Polygon, MultiPolygon, box
+import geopandas as gpd # type: ignore
+from shapely.geometry import shape, mapping, Polygon, MultiPolygon, box # type: ignore
 import numpy as np
-from pygeotools.lib import timelib, iolib, malib, warplib, geolib
-import seaborn as sns
-from tqdm import tqdm
-import pandas as pd
-import matplotlib.pyplot as plt
-from osgeo import gdal
-import rasterio as rio
-from rasterio.mask import mask
-from rasterio.plot import plotting_extent, show
-from rasterio.transform import from_origin
-from rasterio.warp import calculate_default_transform, reproject, Resampling
-from pyproj import Transformer, CRS
-import fiona
-from concurrent.futures import ThreadPoolExecutor
-import subprocess
-import requests
-import tarfile
-import gzip
+from pygeotools.lib import timelib, iolib, malib, warplib, geolib # type: ignore
+import seaborn as sns # type: ignore
+from tqdm import tqdm # type: ignore
+import pandas as pd # type: ignore
+import matplotlib.pyplot as plt # type: ignore
+from osgeo import gdal # type: ignore
+import rasterio as rio # type: ignore
+from rasterio.mask import mask # type: ignore 
+from rasterio.plot import plotting_extent, show # type: ignore
+from rasterio.transform import from_origin # type: ignore
+from rasterio.warp import calculate_default_transform, reproject, Resampling # type: ignore
+from pyproj import Transformer, CRS # type: ignore
+import fiona # type: ignore
+from concurrent.futures import ThreadPoolExecutor 
+import subprocess # type: ignore
+import requests # type: ignore
+import tarfile # type: ignore
+import gzip # type: ignore
 import shutil
 import glob
-import cartopy.crs as ccrs
-import cartopy.feature as cfeature
-import pdemtools as pdem
-import rioxarray as rxr
-from affine import Affine
+import cartopy.crs as ccrs # type: ignore
+import cartopy.feature as cfeature # type: ignore 
+import pdemtools as pdem # type: ignore
+import rioxarray as rxr # type: ignore
+from affine import Affine # type: ignore
 import gc
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-from natsort import natsorted  # Natural sorting for filenames
-import contextily as cx
-from geodatasets import get_path
-from matplotlib.patches import Rectangle
+from mpl_toolkits.axes_grid1 import make_axes_locatable # type: ignore
+from natsort import natsorted  # Natural sorting for  filenames # type: ignore
+import contextily as cx # type: ignore
+from geodatasets import get_path # type: ignore
+from matplotlib.patches import Rectangle  # type: ignore
 import configparser
 
 # Define main directory
