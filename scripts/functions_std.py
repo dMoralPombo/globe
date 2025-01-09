@@ -1298,7 +1298,7 @@ def configuration():
     
     # Read config
     config = configparser.ConfigParser()
-    config.read("config.cfg")
+    config.read("/media/luna/moralpom/globe/github_ready/globe/config.cfg")
 
     # Retrieve paths
     maindir = config.get("paths", "maindir")
