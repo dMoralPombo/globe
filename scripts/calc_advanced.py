@@ -25,8 +25,8 @@ import geopandas as gpd # type: ignore
 from tqdm import tqdm # type: ignore
 import pandas as pd # type: ignore
 from affine import Affine # type: ignore
-from functions_std import *
-from functions_std import (
+from scripts.functions_all import *
+from scripts.functions_all import (
     process_tile_intersections,
     clip_raster_to_cell,
     reduce_strip,
