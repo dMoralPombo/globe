@@ -49,411 +49,6 @@ mosaic_dem = maindir + "data/ArcticDEM/mosaic/arcticdem_mosaic_100m_v4.1_dem.tif
 # Define spatial resolution of the strips
 res = 2
 
-
-##########################################################################################
-
-
-def clip_raster_to_cell(raster, bounds, output_dir, nodata_value=-9999):
-    """
-    This is a function to clip (crop) a raster to a tile cell (defined by its bounds)
-
-    Args:
-        raster (str): Path to the input raster file.
-        bounds (tuple): Bounds of the tile cell to clip the raster to (xmin, ymin, xmax, ymax).
-        output_dir (str): Directory to store the output clipped raster.
-        nodata_value (int, optional): Value to be ignored as "no data". Defaults to -9999.
-    Returns:
-        clipped_fn (str): Path to the clipped raster file, or None if no overlap.
-    """
-    temp_dir = "/media/luna/moralpom/globe/data/ArcticDEM/temp/"
-    outputdir2 = "/media/luna/moralpom/globe/data/ArcticDEM/temp2/"
-
-    # Ensure the output directory exists
-    os.makedirs(output_dir, exist_ok=True)
-    os.makedirs(outputdir2, exist_ok=True)
-    # Ensure output directories exist
-    for directory in [output_dir, temp_dir]:
-        try:
-            os.makedirs(directory, exist_ok=True)
-        except Exception as e:
-            print(f"Error creating directory {directory}: {e}")
-            return None
-
-    if not os.path.exists(raster):
-        print(f"Unzipping raster:\n {raster}")
-        raster_n = raster[:-8]
-        raster = find_and_unzip(raster_n)
-
-    try:
-        # Open the raster file
-        with rio.open(raster) as src:
-            # Check if bounds overlap with raster's extent
-            src_bounds = src.bounds
-            print(f"Raster bounds: {src_bounds}")
-            # print(f"Clipping bounds: {bounds}")
-
-            # Check for overlap
-            if (
-                bounds[2] <= src_bounds.left
-                or bounds[0] >= src_bounds.right
-                or bounds[3] <= src_bounds.bottom
-                or bounds[1] >= src_bounds.top
-            ):
-                print("No overlap between raster and bounds.")
-                return None  # No overlap, so exit the function
-
-            # Create a window using the tile bounds
-            window = rio.windows.from_bounds(*bounds, transform=src.transform)
-
-            # Adjust window if it exceeds raster dimensions
-            window = window.intersection(
-                rio.windows.Window(
-                    col_off=0, row_off=0, width=src.width, height=src.height
-                )
-            )
-
-            print(f"Window to be used for clipping raster: {window}")
-
-            # Read the clipped data within the window
-            clipped_data = src.read(1, window=window)
-
-            # Mask the NoData value (-9999) in the clipped data
-            masked_data = np.ma.masked_equal(clipped_data, nodata_value)
-
-            # Update metadata for the clipped raster
-            clipped_meta = src.meta.copy()
-            clipped_meta.update(
-                {
-                    "height": window.height,
-                    "width": window.width,
-                    "transform": src.window_transform(window),
-                    "nodata": nodata_value,
-                }
-            )
-
-            # Temporary filename to store clipped raster
-            clipped_fn = os.path.join(output_dir, f"clipped_{os.path.basename(raster)}")
-            try:
-                with rio.open(clipped_fn, "w", **clipped_meta) as dest:
-                    dest.write(clipped_data, 1)
-                    # print("Temporary file stored.")
-            except Exception as e:
-                print(f"Error writing file {clipped_fn}: {e}")
-                try:
-                    clipped_fn = os.path.join(
-                        outputdir2, f"clipped_{os.path.basename(raster)}"
-                    )
-                    with rio.open(clipped_fn, "w", **clipped_meta) as dest:
-                        dest.write(clipped_data, 1)
-                        print("Temporary file stored in alterate directory", outputdir2)
-
-                except Exception as f:
-                    print(
-                        f"Error writing file {clipped_fn} to alternate directory: {f}"
-                    )
-                    return None
-                    # raise
-
-            return clipped_fn  # Return the temporary clipped file name
-    except Exception as ex:
-        print(f"Error processing file {raster}: {ex}")
-        return None
-
-
-######################################################################
-
-
-def plot_clipped_rasters(raster1, raster2, bounds=None, title=None):
-    """
-    Function to plot two clipped rasters side by side with tile bounds overlaid.
-
-    Args:
-        raster1 (str): Path to the first raster file.
-        raster2 (str): Path to the second raster file.
-        bounds (tuple, optional): Bounds of the tile cell (xmin, ymin, xmax, ymax). Defaults to None.
-        title (str, optional): Title of the
-    """
-    # Open the clipped rasters
-    with rio.open(raster1) as src1, rio.open(raster2) as src2:
-        fig, axes = plt.subplots(1, 2, figsize=(15, 8))
-
-        if title and isinstance(title, str):
-            titles = title.split("/")
-            if len(titles) != 2:
-                raise ValueError(
-                    "Title must contain exactly two parts separated by a slash (/)."
-                )
-        else:
-            titles = ["Clipped Raster 1", "Clipped Raster 2"]
-
-        for ax, src, title in zip(axes, [src1, src2], titles):
-            # Plot the raster
-            extent = [
-                src.bounds.left,
-                src.bounds.right,
-                src.bounds.bottom,
-                src.bounds.top,
-            ]
-            rio.plot.show(src, ax=ax, title=title, cmap="terrain", extent=extent)
-
-            # Overlay tile bounds, if provided
-            if bounds:
-                min_x, min_y, max_x, max_y = bounds
-                ax.plot(
-                    [min_x, max_x, max_x, min_x, min_x],
-                    [min_y, min_y, max_y, max_y, min_y],
-                    color="red",
-                    linestyle="--",
-                    linewidth=2,
-                    label="tile Bounds",
-                )
-                ax.legend(loc="upper right")
-                ax.set_xlabel("Longitude")
-                ax.set_ylabel("Latitude")
-
-        plt.tight_layout()
-        plt.show()
-
-
-######################################################################
-
-
-def find_and_unzip(pathfile):
-    """
-    This is a function to find a .tif file and/or unzip the .gz file
-    if necessary (called from reduce_strip())
-
-    Args:
-        pathfile (str): name of the file (as in the df_stats pandas DF)
-
-    Returns:
-        dict: Dictionary containing statistics.
-
-    """
-    tif_pattern = pathfile + "*_dem.tif"
-
-    # Look for the final .tif file
-    tif_files = glob.glob(tif_pattern)
-    if tif_files:
-        print(f"Found existing .tif file: \n{tif_files[0]}")
-        return tif_files[0]
-
-    # If .tif file not found, check for a .gz file and unzip it if necessary
-    gzfile_list = glob.glob(pathfile + "*.gz")
-    if not gzfile_list:
-        print("No .gz file found. Skipping...")
-        return None
-
-    gz_file = gzfile_list[0]
-    tar_file = gz_file[:-3]  # Remove .gz extension
-
-    # Extract the .gz and .tar files if not done already
-    try:
-        # Unzip the .gz file to .tar
-        with gzip.open(gz_file, "rb") as f_gz_in:
-            with open(tar_file, "wb") as f_tar_out:
-                shutil.copyfileobj(f_gz_in, f_tar_out)
-
-        # Extract the .tar file to the same directory
-        with tarfile.open(tar_file, "r") as tar:
-            tar.extractall(path=os.path.dirname(tar_file))
-            print("...extracted.")
-
-        os.remove(tar_file)
-        # Refresh .tif file search
-        tif_files = glob.glob(f"{pathfile}*_dem.tif")
-        return tif_files[0] if tif_files else None
-
-    except Exception as e:
-        print(f"Error decompressing {gz_file}: {e}")
-        if os.path.exists(tar_file):
-            os.remove(tar_file)
-        return None
-
-######################################################################
-
-def warp_and_calculate_stats(mosaic_clipped_fn, stripdem_clipped_fn):
-    """
-    Warp rasters to the same resolution, extent, and projection, and calculate statistics.
-
-    Args:
-        mosaic_clipped_fn (str): path to the mosaic directory (temporal)
-        stripdem_clipped_fn (str): path to the strip directory (temporal)
-
-    Returns:
-        dict: Dictionary containing statistics.
-
-    """
-    ds_list_clipped = warplib.memwarp_multi_fn(
-        [mosaic_clipped_fn, stripdem_clipped_fn],
-        extent="intersection",
-        res="100",
-        t_srs="first",
-        r="cubic",
-    )
-    r1_ds, r2_ds = ds_list_clipped
-    r1 = iolib.ds_getma(r1_ds, 1)
-    r2 = iolib.ds_getma(r2_ds, 1)
-    diff = r2 - r1
-
-    if diff.count() == 0:
-        print("No valid overlap between input rasters")
-        return None, None, None
-
-    diff_stats = (
-        tuple(round(stat, 2) for stat in malib.print_stats(diff))
-        if malib.print_stats(diff)
-        else None
-    )
-    rmse = round(float(malib.rmse(diff)), 2)
-    mean_r2 = round(float(np.nanmean(r2)), 2)
-
-    return diff_stats, mean_r2, rmse
-
-######################################################################
-
-def reduce_strip(
-    strip_name,
-    tile_bounds,
-    strips_dir,
-    mosaic_clipped_fn,
-    geocell_i,
-    diffndv=-9999.0,
-    plotting=False,
-    temp_dir=None,
-):
-    """
-    Process a strip DEM to match the spatial extent of a fixed 25000x25000 array,
-    apply a bitmask, save the result, and return statistics.
-
-    Args:
-        strip_name (str): name of the strip (as in the df_stats pandas DF)
-        tile_bounds (tuple): bounds of the super tile (e.g. (-300100.0, -1850100.0, -249900.0, -1799900.0))
-        strips_dir (str): path to the strip directory (temporal)
-        mosaic_clipped_fn (str): path to the mosaic directory (temporal)
-        geocell_i (str): geocell of the strip
-        diffndv (float): no-value float (-9999)
-        plotting (bool, optional): plots both the mosaic and the strip cropped to the supertile. Defaults to False.
-        temp_dir (str): directory to save the processed output array.
-
-    Returns:
-        dict: Dictionary containing statistics.
-    """
-    strippath = f"/media/luna/archive/SATS/OPTICAL/ArcticDEM/ArcticDEM/strips/s2s041/2m/{geocell_i}/SETSM_s2s041_{strip_name}"
-    tif_file = find_and_unzip(strippath)
-    if not tif_file:
-        return None, None, None, None
-
-    try:
-        # Handle the bitmask file
-        bitmask_pattern = strippath + "*_bitmask.tif"
-        bitmask_files = glob.glob(bitmask_pattern)
-        if not bitmask_files:
-            print("No bitmask .tif file found. Proceeding without mask...")
-            bitmask_clipped_fn = None
-        else:
-            bitmask_clipped_fn = clip_raster_to_cell(
-                bitmask_files[0], tile_bounds, strips_dir, nodata_value=6
-            )
-            if bitmask_clipped_fn is None or not os.path.exists(bitmask_clipped_fn):
-                print("Bitmask clipping failed, proceeding without mask...")
-                bitmask_clipped_fn = None
-
-        # Clip the strip to the tile bounds
-        stripdem_clipped_fn = clip_raster_to_cell(
-            tif_file, tile_bounds, strips_dir, diffndv
-        )
-        if stripdem_clipped_fn is None or not os.path.exists(stripdem_clipped_fn):
-            print("Clipping failed, skipping this strip.")
-            return None, None, None, None
-
-        # Read the clipped data and its transform
-        with rio.open(stripdem_clipped_fn) as src:
-            strip_data = src.read(1)
-            strip_transform = src.transform
-            # strip_nodata = src.nodata
-
-        # Create an empty 25000x25000 array for the tile
-        tile_size = (25000, 25000)
-        tile_array = np.full(tile_size, diffndv, dtype=np.float32)
-
-        # Get the offsets to place the clipped data into the 25000x25000 array
-        x_min, y_max = tile_bounds[0], tile_bounds[3]
-        col_start = int((strip_transform.c - x_min) / strip_transform.a)
-        row_start = int((y_max - strip_transform.f) / -strip_transform.e)
-        col_end = col_start + strip_data.shape[1]
-        row_end = row_start + strip_data.shape[0]
-
-        # Place the clipped data into the tile array
-        tile_array[row_start:row_end, col_start:col_end] = strip_data
-
-        # Apply the bitmask, if available
-        if bitmask_clipped_fn:
-            with rio.open(bitmask_clipped_fn) as mask_src:
-                bitmask_data = mask_src.read(1)
-                tile_array[row_start:row_end, col_start:col_end][
-                    bitmask_data != 0
-                ] = diffndv
-
-        # Save the full 25000x25000 array
-        processed_output_file = os.path.join(temp_dir, f"masked_arr_{strip_name}.npy")
-        os.makedirs(os.path.dirname(processed_output_file), exist_ok=True)
-        np.save(processed_output_file, tile_array)
-        # print(f"processed_output_file saved as {processed_output_file}")
-
-        # Compute stats between mosaic and clipped array
-        diff_stats, mean_r2, rmse = warp_and_calculate_stats(
-            mosaic_clipped_fn, stripdem_clipped_fn
-        )
-
-        if plotting:
-            plot_clipped_rasters(
-                mosaic_clipped_fn,
-                tif_file,
-                bounds=tile_bounds,
-                title="Mosaic/Original raster",
-            )
-            plt.close()
-            plot_clipped_rasters(
-                bitmask_clipped_fn,
-                stripdem_clipped_fn,
-                bounds=tile_bounds,
-                title="Bitmask/Clipped+masked raster",
-            )
-            plt.close()
-            plt.imshow(tile_array, cmap="cool", interpolation="nearest")
-            plt.title(f"25000x25000 tile for {strip_name} (Bitmask Applied)")
-            plt.colorbar(label="Elevation (m)")
-            plt.show()
-            plt.close()
-
-        # Cleanup
-        os.remove(stripdem_clipped_fn)
-        if bitmask_clipped_fn:
-            os.remove(bitmask_clipped_fn)
-        gc.collect()
-
-        return diff_stats, mean_r2, rmse, processed_output_file
-
-    except Exception as e:
-        print(f"Error processing strip {strip_name}: {e}")
-        return None, None, None, None
-
-
-######################################################################
-
-
-def calculate_statistics(running_sum, running_squared_sum, valid_count):
-    """
-    Calculate mean and standard deviation from running totals.
-    """
-    mean_dems = running_sum / valid_count
-    sigma = np.sqrt((running_squared_sum / valid_count) - (mean_dems**2))
-    mean_dems[valid_count == 0] = np.nan
-    sigma[valid_count == 0] = np.nan
-    return mean_dems, sigma
-
-
 ######################################################################
 def stats_calculator(supertile, subtile, tile_bounds, intersect_dems_df, strip_index_gdf, mosaic_index_gdf, mosaic_dir, strips_dir, stats_columns):
     """
@@ -654,5 +249,399 @@ def stats_calculator(supertile, subtile, tile_bounds, intersect_dems_df, strip_i
         os.remove(mosaic_clipped_fn)
 
     return df_stats
+
+
+######################################################################
+
+def clip_raster_to_cell(raster, bounds, output_dir, nodata_value=-9999):
+    """
+    This is a function to clip (crop) a raster to a tile cell (defined by its bounds)
+
+    Args:
+        raster (str): Path to the input raster file.
+        bounds (tuple): Bounds of the tile cell to clip the raster to (xmin, ymin, xmax, ymax).
+        output_dir (str): Directory to store the output clipped raster.
+        nodata_value (int, optional): Value to be ignored as "no data". Defaults to -9999.
+    Returns:
+        clipped_fn (str): Path to the clipped raster file, or None if no overlap.
+    """
+    temp_dir = "/media/luna/moralpom/globe/data/ArcticDEM/temp/"
+    outputdir2 = "/media/luna/moralpom/globe/data/ArcticDEM/temp2/"
+
+    # Ensure the output directory exists
+    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(outputdir2, exist_ok=True)
+    # Ensure output directories exist
+    for directory in [output_dir, temp_dir]:
+        try:
+            os.makedirs(directory, exist_ok=True)
+        except Exception as e:
+            print(f"Error creating directory {directory}: {e}")
+            return None
+
+    if not os.path.exists(raster):
+        print(f"Unzipping raster:\n {raster}")
+        raster_n = raster[:-8]
+        raster = find_and_unzip(raster_n)
+
+    try:
+        # Open the raster file
+        with rio.open(raster) as src:
+            # Check if bounds overlap with raster's extent
+            src_bounds = src.bounds
+            print(f"Raster bounds: {src_bounds}")
+            # print(f"Clipping bounds: {bounds}")
+
+            # Check for overlap
+            if (
+                bounds[2] <= src_bounds.left
+                or bounds[0] >= src_bounds.right
+                or bounds[3] <= src_bounds.bottom
+                or bounds[1] >= src_bounds.top
+            ):
+                print("No overlap between raster and bounds.")
+                return None  # No overlap, so exit the function
+
+            # Create a window using the tile bounds
+            window = rio.windows.from_bounds(*bounds, transform=src.transform)
+
+            # Adjust window if it exceeds raster dimensions
+            window = window.intersection(
+                rio.windows.Window(
+                    col_off=0, row_off=0, width=src.width, height=src.height
+                )
+            )
+
+            print(f"Window to be used for clipping raster: {window}")
+
+            # Read the clipped data within the window
+            clipped_data = src.read(1, window=window)
+
+            # Mask the NoData value (-9999) in the clipped data
+            masked_data = np.ma.masked_equal(clipped_data, nodata_value)
+
+            # Update metadata for the clipped raster
+            clipped_meta = src.meta.copy()
+            clipped_meta.update(
+                {
+                    "height": window.height,
+                    "width": window.width,
+                    "transform": src.window_transform(window),
+                    "nodata": nodata_value,
+                }
+            )
+
+            # Temporary filename to store clipped raster
+            clipped_fn = os.path.join(output_dir, f"clipped_{os.path.basename(raster)}")
+            try:
+                with rio.open(clipped_fn, "w", **clipped_meta) as dest:
+                    dest.write(clipped_data, 1)
+                    # print("Temporary file stored.")
+            except Exception as e:
+                print(f"Error writing file {clipped_fn}: {e}")
+                try:
+                    clipped_fn = os.path.join(
+                        outputdir2, f"clipped_{os.path.basename(raster)}"
+                    )
+                    with rio.open(clipped_fn, "w", **clipped_meta) as dest:
+                        dest.write(clipped_data, 1)
+                        print("Temporary file stored in alterate directory", outputdir2)
+
+                except Exception as f:
+                    print(
+                        f"Error writing file {clipped_fn} to alternate directory: {f}"
+                    )
+                    return None
+                    # raise
+
+            return clipped_fn  # Return the temporary clipped file name
+    except Exception as ex:
+        print(f"Error processing file {raster}: {ex}")
+        return None
+
+
+######################################################################
+
+
+def plot_clipped_rasters(raster1, raster2, bounds=None, title=None):
+    """
+    Function to plot two clipped rasters side by side with tile bounds overlaid.
+
+    Args:
+        raster1 (str): Path to the first raster file.
+        raster2 (str): Path to the second raster file.
+        bounds (tuple, optional): Bounds of the tile cell (xmin, ymin, xmax, ymax). Defaults to None.
+        title (str, optional): Title of the plot. If provided, it should contain exactly two parts separated by a slash (/) for the two subplots.
+    """
+    # Open the clipped rasters
+    with rio.open(raster1) as src1, rio.open(raster2) as src2:
+        fig, axes = plt.subplots(1, 2, figsize=(15, 8))
+
+        if title and isinstance(title, str):
+            titles = title.split("/")
+            if len(titles) != 2:
+                raise ValueError(
+                    "Title must contain exactly two parts separated by a slash (/)."
+                )
+        else:
+            titles = ["Clipped Raster 1", "Clipped Raster 2"]
+
+        for ax, src, title in zip(axes, [src1, src2], titles):
+            # Plot the raster
+            extent = [
+                src.bounds.left,
+                src.bounds.right,
+                src.bounds.bottom,
+                src.bounds.top,
+            ]
+            rio.plot.show(src, ax=ax, title=title, cmap="terrain", extent=extent)
+
+            # Overlay tile bounds, if provided
+            if bounds:
+                min_x, min_y, max_x, max_y = bounds
+                ax.plot(
+                    [min_x, max_x, max_x, min_x, min_x],
+                    [min_y, min_y, max_y, max_y, min_y],
+                    color="red",
+                    linestyle="--",
+                    linewidth=2,
+                    label="tile Bounds",
+                )
+                ax.legend(loc="upper right")
+                ax.set_xlabel("Longitude")
+                ax.set_ylabel("Latitude")
+
+        plt.tight_layout()
+        plt.show()
+
+
+######################################################################
+
+
+def find_and_unzip(pathfile):
+    """
+    This is a function to find a .tif file and/or unzip the .gz file
+    if necessary (called from reduce_strip())
+
+    Args:
+        pathfile (str): name of the file (as in the df_stats pandas DF)
+
+    Returns:
+        str: Path to the .tif file, or None if not found.
+
+    """
+    tif_pattern = pathfile + "*_dem.tif"
+
+    # Look for the final .tif file
+    tif_files = glob.glob(tif_pattern)
+    if tif_files:
+        print(f"Found existing .tif file: \n{tif_files[0]}")
+        return tif_files[0]
+
+    # If .tif file not found, check for a .gz file and unzip it if necessary
+    gzfile_list = glob.glob(pathfile + "*.gz")
+    if not gzfile_list:
+        print("No .gz file found. Skipping...")
+        return None
+
+    gz_file = gzfile_list[0]
+    tar_file = gz_file[:-3]  # Remove .gz extension
+
+    # Extract the .gz and .tar files if not done already
+    try:
+        # Unzip the .gz file to .tar
+        with gzip.open(gz_file, "rb") as f_gz_in:
+            with open(tar_file, "wb") as f_tar_out:
+                shutil.copyfileobj(f_gz_in, f_tar_out)
+
+        # Extract the .tar file to the same directory
+        with tarfile.open(tar_file, "r") as tar:
+            tar.extractall(path=os.path.dirname(tar_file))
+            print("...extracted.")
+
+        os.remove(tar_file)
+        # Refresh .tif file search
+        tif_files = glob.glob(f"{pathfile}*_dem.tif")
+        return tif_files[0] if tif_files else None
+
+    except Exception as e:
+        print(f"Error decompressing {gz_file}: {e}")
+        if os.path.exists(tar_file):
+            os.remove(tar_file)
+        return None
+
+######################################################################
+
+def warp_and_calculate_stats(mosaic_clipped_fn, stripdem_clipped_fn):
+    """
+    Warp rasters to the same resolution, extent, and projection, and calculate statistics.
+
+    Args:
+        mosaic_clipped_fn (str): path to the mosaic directory (temporal)
+        stripdem_clipped_fn (str): path to the strip directory (temporal)
+
+    Returns:
+        dict: Dictionary containing statistics.
+
+    """
+    ds_list_clipped = warplib.memwarp_multi_fn(
+        [mosaic_clipped_fn, stripdem_clipped_fn],
+        extent="intersection",
+        res="100",
+        t_srs="first",
+        r="cubic",
+    )
+    r1_ds, r2_ds = ds_list_clipped
+    r1 = iolib.ds_getma(r1_ds, 1)
+    r2 = iolib.ds_getma(r2_ds, 1)
+    diff = r2 - r1
+
+    if diff.count() == 0:
+        print("No valid overlap between input rasters")
+        return None, None, None
+
+    diff_stats = (
+        tuple(round(stat, 2) for stat in malib.print_stats(diff))
+        if malib.print_stats(diff)
+        else None
+    )
+    rmse = round(float(malib.rmse(diff)), 2)
+    mean_r2 = round(float(np.nanmean(r2)), 2)
+
+    return diff_stats, mean_r2, rmse
+
+######################################################################
+
+def reduce_strip(
+    strip_name,
+    tile_bounds,
+    strips_dir,
+    mosaic_clipped_fn,
+    geocell_i,
+    diffndv=-9999.0,
+    plotting=False,
+    temp_dir=None,
+):
+    """
+    Process a strip DEM to match the spatial extent of a fixed 25000x25000 array,
+    apply a bitmask, save the result, and return statistics.
+
+    Args:
+        strip_name (str): name of the strip (as in the df_stats pandas DF)
+        tile_bounds (tuple): bounds of the super tile (e.g. (-300100.0, -1850100.0, -249900.0, -1799900.0))
+        strips_dir (str): path to the strip directory (temporal)
+        mosaic_clipped_fn (str): path to the mosaic directory (temporal)
+        geocell_i (str): geocell of the strip
+        diffndv (float): no-value float (-9999)
+        plotting (bool, optional): plots both the mosaic and the strip cropped to the supertile. Defaults to False.
+        temp_dir (str): directory to save the processed output array.
+
+    Returns:
+        dict: Dictionary containing statistics.
+    """
+    strippath = f"/media/luna/archive/SATS/OPTICAL/ArcticDEM/ArcticDEM/strips/s2s041/2m/{geocell_i}/SETSM_s2s041_{strip_name}"
+    tif_file = find_and_unzip(strippath)
+    if not tif_file:
+        return None, None, None, None
+
+    try:
+        # Handle the bitmask file
+        bitmask_pattern = strippath + "*_bitmask.tif"
+        bitmask_files = glob.glob(bitmask_pattern)
+        if not bitmask_files:
+            print("No bitmask .tif file found. Proceeding without mask...")
+            bitmask_clipped_fn = None
+        else:
+            bitmask_clipped_fn = clip_raster_to_cell(
+                bitmask_files[0], tile_bounds, strips_dir, nodata_value=6
+            )
+            if bitmask_clipped_fn is None or not os.path.exists(bitmask_clipped_fn):
+                print("Bitmask clipping failed, proceeding without mask...")
+                bitmask_clipped_fn = None
+
+        # Clip the strip to the tile bounds
+        stripdem_clipped_fn = clip_raster_to_cell(
+            tif_file, tile_bounds, strips_dir, diffndv
+        )
+        if stripdem_clipped_fn is None or not os.path.exists(stripdem_clipped_fn):
+            print("Clipping failed, skipping this strip.")
+            return None, None, None, None
+
+        # Read the clipped data and its transform
+        with rio.open(stripdem_clipped_fn) as src:
+            strip_data = src.read(1)
+            strip_transform = src.transform
+            # strip_nodata = src.nodata
+
+        # Create an empty 25000x25000 array for the tile
+        tile_size = (25000, 25000)
+        tile_array = np.full(tile_size, diffndv, dtype=np.float32)
+
+        # Get the offsets to place the clipped data into the 25000x25000 array
+        x_min, y_max = tile_bounds[0], tile_bounds[3]
+        col_start = int((strip_transform.c - x_min) / strip_transform.a)
+        row_start = int((y_max - strip_transform.f) / -strip_transform.e)
+        col_end = col_start + strip_data.shape[1]
+        row_end = row_start + strip_data.shape[0]
+
+        # Place the clipped data into the tile array
+        tile_array[row_start:row_end, col_start:col_end] = strip_data
+
+        # Apply the bitmask, if available
+        if bitmask_clipped_fn:
+            with rio.open(bitmask_clipped_fn) as mask_src:
+                bitmask_data = mask_src.read(1)
+                tile_array[row_start:row_end, col_start:col_end][
+                    bitmask_data != 0
+                ] = diffndv
+
+        # Save the full 25000x25000 array
+        processed_output_file = os.path.join(temp_dir, f"masked_arr_{strip_name}.npy")
+        os.makedirs(os.path.dirname(processed_output_file), exist_ok=True)
+        np.save(processed_output_file, tile_array)
+        # print(f"processed_output_file saved as {processed_output_file}")
+
+        # Compute stats between mosaic and clipped array
+        diff_stats, mean_r2, rmse = warp_and_calculate_stats(
+            mosaic_clipped_fn, stripdem_clipped_fn
+        )
+
+        if plotting:
+            plot_clipped_rasters(
+                mosaic_clipped_fn,
+                tif_file,
+                bounds=tile_bounds,
+                title="Mosaic/Original raster",
+            )
+            plt.close()
+            plot_clipped_rasters(
+                bitmask_clipped_fn,
+                stripdem_clipped_fn,
+                bounds=tile_bounds,
+                title="Bitmask/Clipped+masked raster",
+            )
+            plt.close()
+            plt.imshow(tile_array, cmap="cool", interpolation="nearest")
+            plt.title(f"25000x25000 tile for {strip_name} (Bitmask Applied)")
+            plt.colorbar(label="Elevation (m)")
+            plt.show()
+            plt.close()
+
+        # Cleanup
+        if os.path.exists(stripdem_clipped_fn):
+            if bitmask_clipped_fn and os.path.exists(bitmask_clipped_fn):
+                os.remove(bitmask_clipped_fn)
+        gc.collect()
+
+        return diff_stats, mean_r2, rmse, processed_output_file
+
+    # Handle any exceptions that occur during processing
+    # Expected exceptions include:
+    # - FileNotFoundError: If the strip file or bitmask file is not found
+    # - rio.errors.RasterioIOError: If there is an error reading or writing raster files
+    # - ValueError: If there is an issue with array dimensions or transformations
+    except Exception as e:
+        print(f"Error processing strip {strip_name}: {e}")
+        return None, None, None, None
 
 ######################################################################

@@ -51,7 +51,7 @@ res = 2
 ######################################################################
 def intersection(supertile, subtile, strip_index_gdf, mosaic_index_gdf, archdir):
     """
-    Computes the intersection between a the StripDEMs and the mosaic in a subtile.
+    Computes the intersection between the StripDEMs and the mosaic in a subtile.
 
     Args:
         supertile (str): Identifier for the supertile.
@@ -67,8 +67,6 @@ def intersection(supertile, subtile, strip_index_gdf, mosaic_index_gdf, archdir)
     tile_id = tile + "_2m_v4.1"
 
     # Temporary files for the clipped mosaic/stripDEMs
-    mosaic_dir = maindir + f"data/ArcticDEM/mosaic/temp/{tile}/"
-    strips_dir = maindir + f"data/ArcticDEM/temp2/{tile}/"
 
     try:
         tile_row = mosaic_index_gdf[mosaic_index_gdf["dem_id"] == tile_id]
@@ -101,8 +99,7 @@ def intersection(supertile, subtile, strip_index_gdf, mosaic_index_gdf, archdir)
         )
 
         if intersect_dems_df.empty:
-            print("intersect_dems_df is empty (No StripDEMs in this tile).\
-                    \n Skip")
+            print("intersect_dems_df is empty (No StripDEMs in this tile).\nSkip")
             return None
         else:
             print("intersect_dems_df loaded - NOT empty")
@@ -133,7 +130,12 @@ def process_tile_intersections(
     mosaic_index_path = "/media/luna/moralpom/globe/data/ArcticDEM/mosaic/ArcticDEM_Mosaic_Index_latest_shp/ArcticDEM_Mosaic_Index_v4_1_2m.shp"
     mosaic_index_gdf = gpd.read_file(mosaic_index_path)
 
-    tile_row = mosaic_index_gdf[mosaic_index_gdf["tile"] == tile]
+    if "tile" in mosaic_index_gdf.columns:
+        tile_row = mosaic_index_gdf[mosaic_index_gdf["tile"] == tile]
+    elif "dem_id" in mosaic_index_gdf.columns:
+        tile_row = mosaic_index_gdf[mosaic_index_gdf["dem_id"] == tile]
+    else:
+        raise KeyError("Neither 'tile' nor 'dem_id' column found in mosaic_index_gdf")
     tile_coords = tile_row.iloc[0]["geometry"]
     tile_bounds = tile_coords.bounds
     supertile = tile[:5]
@@ -264,15 +266,16 @@ def handle_strip_download(geocell, url, archdir):
         archdir (str): Archive directory for StripDEM files.
     """
     fname = url.split("/")[-1]
-    extracted_dir = os.path.join(archdir, geocell, fname)
+    gz_file_path = os.path.join(archdir, geocell, fname)
+    extracted_dir = os.path.join(archdir, geocell, fname[:-7])
 
     if os.path.exists(extracted_dir):
         # print(f"Strip already extracted: {extracted_dir}")
         return
 
     try:
-        extracted_tar_path = extracted_dir[:-3]
-        with gzip.open(extracted_dir, "rb") as f_gz_in:
+        extracted_tar_path = gz_file_path[:-3]
+        with gzip.open(gz_file_path, "rb") as f_gz_in:
             with open(extracted_tar_path, "wb") as f_tar_out:
                 shutil.copyfileobj(f_gz_in, f_tar_out)
 
@@ -447,91 +450,30 @@ def download_strips(intersect_dems_df):
 
 # Function to download a file using wget
 def download_file(geocell_folder, url):
+    """
+    Downloads a file using requests.
+
+    Parameters:
+        geocell_folder (str): The directory where the file will be downloaded.
+        url (str): The URL of the file to be downloaded.
+    """
+    import requests
+
     # Ensure the geocell folder exists before attempting download
     os.makedirs(geocell_folder, exist_ok=True)
+    local_filename = os.path.join(geocell_folder, url.split('/')[-1])
     try:
-        # Run wget in quiet mode (-q) to reduce verbosity
-        subprocess.run(
-            [
-                "wget",
-                "-r",
-                "-N",
-                "-nH",
-                "-np",
-                "-q",
-                "-A",
-                ".tar.gz",
-                "--cut-dirs=3",
-                "--no-host-directories",
-                "-nd",
-                "-P",
-                geocell_folder,
-                url,
-            ],
-            check=True,
-        )
+        # Use wget in quiet mode (-q) to minimize output
+        with requests.get(url, stream=True) as r:
+            r.raise_for_status()
+            with open(local_filename, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
         print(f"Downloaded to {geocell_folder}\n from URL {url}")
+    except requests.exceptions.RequestException as e:
+        print(f"Failed to download: {url}, error: {e}")
+        print(f"Downloaded to {geocell_folder}\n from URL {url}")
+        return True
     except subprocess.CalledProcessError as e:
         print(f"Failed to download: {url}, error: {e}")
-
-######################################################################
-def configuration():
-    
-    # Read config
-    config = configparser.ConfigParser()
-    config.read("/media/luna/moralpom/globe/github_ready/globe/config.cfg")
-
-    # Retrieve paths
-    maindir = config.get("paths", "maindir")
-    archdir = config.get("paths", "archdir")
-    supertile_dir = config.get("paths", "supertile_dir")
-    stripfiles_dir = config.get("paths", "stripfiles_dir")
-
-    # Retrieve region-specific values
-    region_name = config.get("region", "region_name")
-    supertile = config.get("region", "supertile_id")
-    tile_id = config.get("region", "tile_id")
-
-    # Retrieve tile and strip-related values
-    grid_shapefile = config.get("tile", "grid_shapefile")
-    df_dir = config.get("tile", "df_dir")
-    url_template = config.get("strip", "url_template")
-
-    # Retrieve stats column names
-    stats_columns = config.get("stats", "stats_columns").split(",")
-    stats_columns = [column.strip() for column in stats_columns]    
-
-    # Print to verify
-    print(f"Main Directory: {maindir}")
-    print(f"Region: {region_name}")
-    # print(f"SuperTile ID: {supertile}")
-    print(f"Grid Shapefile: {grid_shapefile}")
-    print(f"Output Directory for CSVs: {df_dir}")
-    print(f"URL Template: {url_template}")
-
-    # Define main directory
-    maindir = str("/media/luna/moralpom/globe/")
-    archdir = str("/media/luna/archive/SATS/OPTICAL/ArcticDEM/ArcticDEM/strips/s2s041/2m/")
-
-    # Define spatial resolution of the strips
-    res = 2
-
-    # No data value, 0 will give odd outputs
-    diffndv = -9999
-
-    # Load the stripfile shapefile
-    strip_index_path = (
-        maindir
-        + "data/ArcticDEM/ArcticDEM_Strip_Index_latest_shp/ArcticDEM_Strip_Index_s2s041.shp"
-    )
-    strip_index_gdf = gpd.read_file(strip_index_path)
-    # Reproject the strip GeoDataFrame to the desired CRS (EPSG:3413)
-    strip_index_gdf = strip_index_gdf.to_crs("EPSG:3413")
-
-    # Load the mosaic shapefile
-    mosaic_index_path = "/media/luna/moralpom/globe/data/ArcticDEM/mosaic/ArcticDEM_Mosaic_Index_latest_shp/ArcticDEM_Mosaic_Index_v4_1_2m.shp"
-    # mosaic_index_path = f"/media/luna/archive/SATS/OPTICAL/ArcticDEM/ArcticDEM/mosaic/v4.1/2m/{supertile}/index/{tile}_2m_v4.1_index.shp"
-    mosaic_index_gdf = gpd.read_file(mosaic_index_path)
-    
-    return maindir, archdir, res, diffndv, strip_index_gdf, mosaic_index_gdf, stats_columns
-
+        return False

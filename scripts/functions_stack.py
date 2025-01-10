@@ -18,7 +18,7 @@ Functions:
         Calculates mean and standard deviation from running totals.
     save_raster(data, path, transform, nodata_value):
         Saves a numpy array to a GeoTIFF raster file.
-    stack(stackarrays, tile, tile_bounds, plot_every_n, transform):
+    stack(stackarrays, tile, tile_bounds, plot_every_n):
         Handles the processing of the last part of the pipeline, creating the stdev and nDEMs maps.
     stackador(df_stats, threshold, tile, tile_bounds):
         Filters and stacks arrays based on a threshold and tile information.
@@ -36,6 +36,16 @@ from pyproj import Transformer # type: ignore
 import glob
 from affine import Affine # type: ignore
 import gc
+
+def create_directory_if_not_exists(directory):
+    """
+    Create a directory if it does not exist.
+
+    Args:
+        directory (str): Path to the directory.
+    """
+    if not os.path.exists(directory):
+        os.makedirs(directory)
 
 # Define main directory
 maindir = str("/media/luna/moralpom/globe/")
@@ -96,7 +106,7 @@ def stack(
     tile,
     tile_bounds,
     plot_every_n,  # Plot one out of every N DEMs
-    transform=None,
+    #transform=None,
 ):
     """
     This is a function to handle the processing of the last part of the pipeline,
@@ -105,8 +115,7 @@ def stack(
     Args:
         stackarrays (list): list including the (temporary) arrays stored as npy files
         tile (str): id of the tile.
-        tile_bounds (str):
-        transform (_type_,): _description_. Defaults to None.
+        tile_bounds (tuple): Bounds of the tile in the format (x0, y0, x1, y1).
         plot_every_n (int, optional): frequency of plotting. Defaults to 10.
     """
     # Get the tile bounds (x0, y0, x1, y1)
@@ -129,7 +138,7 @@ def stack(
         maindir,
         f"data/ArcticDEM/ArcticDEM_stripfiles/{tile[:5]}/arrays/",
     )
-    os.makedirs(resultsdir, exist_ok=True)
+    create_directory_if_not_exists(resultsdir)
 
     ndems_raster_path = os.path.join(resultsdir, f"{tile}_20_ndems.tif")
     meandems_raster_path = os.path.join(resultsdir, f"{tile}_20_mean.tif")
@@ -137,6 +146,41 @@ def stack(
 
     # Initialize running totals
     running_sum, running_squared_sum, valid_count = initialise_running_totals(cellshape)
+    
+    # Process and plot the DEMs
+    def plot_dem(valid_count, idx, extent, tile, plot_every_n):
+        """
+        Plot the DEMs (every n).
+
+        Args:
+            valid_count (np.array): Array containing the count of valid DEM values.
+            idx (int): Index of the current DEM being processed.
+            extent (list): List containing the coordinates for the axes.
+            tile (str): Tile identifier used in directory paths.
+            plot_every_n (int): Frequency of plotting. Plots one out of every N DEMs.
+        """
+        if isinstance(plot_every_n, int) and idx % plot_every_n == 0:
+            data_mask = valid_count > 0
+            fig, ax = plt.subplots(figsize=(8, 6))
+            img = ax.imshow(
+                valid_count, extent=extent, cmap="viridis", origin="upper"
+            )
+
+            # Additions to the plot
+            plt.title(f"DEM Data coverage after {idx+1} strips.")
+            plt.suptitle(f"{tile} (with coords)")
+            plt.xlabel("Longitude (m) - EPSG 3413")
+            plt.ylabel("Latitude (m)")
+            ax.grid(True, which="both", linestyle="--", linewidth=0.5)
+            plt.colorbar(img)
+            plt.show()
+
+            # Clean up the loaded array and delete variable data_mask
+            plt.close(fig)
+            data_mask = []
+            del data_mask
+            gc.collect()
+
 
     # Process each saved array
     for idx, npy_file in enumerate(tqdm(stackarrays, desc="Stacking DEM arrays")):
@@ -145,32 +189,8 @@ def stack(
             print(f"Processing array {idx}")
             process_array_new(npy_file, running_sum, running_squared_sum, valid_count)
 
-            # Plot boundaries for every Nth DEM
-            if isinstance(plot_every_n, int) and idx % plot_every_n == 0:
-                # Mask valid data (non-NaN pixels)
-                data_mask = valid_count > 0
-                print("data_mask created")
-
-                # Plot the boundary
-                fig, ax = plt.subplots(figsize=(8, 6))
-                img = ax.imshow(
-                    valid_count, extent=extent, cmap="viridis", origin="upper"
-                )
-
-                plt.title(f"DEM Data coverage after {idx+1} strips.")
-                plt.suptitle(f"{tile} (with coords)")
-                plt.xlabel("Longitude (m) - EPSG 3413")
-                plt.ylabel("Latitude (m)")
-                ax.grid(True, which="both", linestyle="--", linewidth=0.5)
-                plt.colorbar(img)
-                plt.show()
-                plt.close(fig)
-
-                # Clean up the loaded array
-                # loaded_array = []
-                data_mask = []
-                del data_mask
-                gc.collect()
+            # Plot the DEMs (every n)
+            plot_dem(stackarrays, valid_count, idx, extent, tile, plot_every_n)
 
             print(f"DEM (#{idx}) processed")
 
@@ -180,6 +200,27 @@ def stack(
             print(f"Error encountered while stacking {npy_file}: {e}. Skipping...")
 
         gc.collect()
+
+    # Define a function to calculate statistics:
+    def calculate_statistics(running_sum, running_squared_sum, valid_count):
+        """
+        Calculate mean and standard deviation from running totals.
+
+        Args:
+            running_sum (np.array): Running sum of DEM values.
+            running_squared_sum (np.array): Running sum of squared DEM values.
+            valid_count (np.array): Running count of valid DEM values.
+        
+        Returns:
+            mean_dems (np.array): Mean elevation values.
+            sigma (np.array): Standard deviation of elevation values.
+        """
+        mean_dems = running_sum / valid_count
+        with np.errstate(divide='ignore', invalid='ignore'):
+            mean_dems = np.where(valid_count != 0, running_sum / valid_count, np.nan)
+        mean_dems[valid_count == 0] = np.nan
+        sigma[valid_count == 0] = np.nan
+        return mean_dems, sigma
 
     # Calculate statistics
     mean_dems, sigma = calculate_statistics(
@@ -270,21 +311,6 @@ def process_array_new(npy_file, running_sum, running_squared_sum, valid_count):
     loaded_array = []
     del valid_mask, loaded_array
     gc.collect()
-    # print("valid_mask and loaded_array deleted, gc collected")
-
-######################################################################
-
-
-def calculate_statistics(running_sum, running_squared_sum, valid_count):
-    """
-    Calculate mean and standard deviation from running totals.
-    """
-    mean_dems = running_sum / valid_count
-    sigma = np.sqrt((running_squared_sum / valid_count) - (mean_dems**2))
-    mean_dems[valid_count == 0] = np.nan
-    sigma[valid_count == 0] = np.nan
-    return mean_dems, sigma
-
 
 ######################################################################
 
@@ -340,6 +366,7 @@ def plot_final_raster(
     Args:
         raster_path (str): Path to the input raster file.
         tile (str): Tile of the raster file.
+        transform (Affine): Affine transformation for the raster.
         cbar_title (str, optional): Title to be displayed in the colorbar. Defaults to '# DEMs'.
         cmap (str, optional): Colour map. Defaults to 'viridis'.
         vmin (float, optional): Minimum value of the colour map. Defaults to None.
@@ -356,7 +383,6 @@ def plot_final_raster(
 
         # Get raster dimensions
         height, width = raster_data.shape
-
         # Round extent for consistent labeling
         extent_r = [np.round(a, -1) for a in extent]
 
@@ -414,37 +440,9 @@ def plot_final_raster(
         )
 
         if not os.path.exists(image_dir):
-            os.makedirs(image_dir)
-
+            create_directory_if_not_exists(image_dir)
         # Save the PNG image
         png_save_path = os.path.join(image_dir, f"{title}_sec.png")
         plt.savefig(png_save_path, dpi=500)
         print(f"PNG image saved at {png_save_path}")
         plt.show()
-
-        # Save the raster data as a TIFF file
-        # tiff_dir = os.path.join(
-        #     maindir,
-        #     f"data/ArcticDEM/ArcticDEM_stripfiles/{tile[:5]}/arrays",
-        # )
-        # if not os.path.exists(tiff_dir):
-        #     os.makedirs(tiff_dir)
-
-        # tiff_save_path = os.path.join(tiff_dir, f"{title}.tif")
-
-        # Save raster array as TIFF using rasterio
-        # NO: already saved by save_raster() using the transform
-        # (is there any difference?)
-        # with rio.open(
-        #     tiff_save_path,
-        #     "w",
-        #     driver="GTiff",
-        #     height=raster_data.shape[0],
-        #     width=raster_data.shape[1],
-        #     count=1,
-        #     dtype=raster_data.dtype,
-        #     crs=src.crs,
-        #     transform=src.transform,
-        # ) as dst:
-        #     dst.write(raster_data, 1)
-
