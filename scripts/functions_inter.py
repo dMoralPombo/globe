@@ -27,43 +27,18 @@ Functions:
 
 @dmoralpombo (based in Jade Bowling's work)
 """
-
 import os
 import sys
 import geopandas as gpd # type: ignore
-from shapely.geometry import shape, mapping, Polygon, MultiPolygon, box # type: ignore
-import numpy as np
-from pygeotools.lib import timelib, iolib, malib, warplib, geolib # type: ignore
-import seaborn as sns # type: ignore
+from shapely.geometry import Polygon, MultiPolygon # type: ignore
 from tqdm import tqdm # type: ignore
 import pandas as pd # type: ignore
-import matplotlib.pyplot as plt # type: ignore
-from osgeo import gdal # type: ignore
-import rasterio as rio # type: ignore
-from rasterio.mask import mask # type: ignore 
-from rasterio.plot import plotting_extent, show # type: ignore
-from rasterio.transform import from_origin # type: ignore
-from rasterio.warp import calculate_default_transform, reproject, Resampling # type: ignore
-from pyproj import Transformer, CRS # type: ignore
-import fiona # type: ignore
-from concurrent.futures import ThreadPoolExecutor 
-import subprocess # type: ignore
-import requests # type: ignore
+import shutil
 import tarfile # type: ignore
 import gzip # type: ignore
-import shutil
-import glob
-import cartopy.crs as ccrs # type: ignore
-import cartopy.feature as cfeature # type: ignore 
-import pdemtools as pdem # type: ignore
-import rioxarray as rxr # type: ignore
-from affine import Affine # type: ignore
+from concurrent.futures import ThreadPoolExecutor 
+import subprocess # type: ignore
 import gc
-from mpl_toolkits.axes_grid1 import make_axes_locatable # type: ignore
-from natsort import natsorted  # Natural sorting for  filenames # type: ignore
-import contextily as cx # type: ignore
-from geodatasets import get_path # type: ignore
-from matplotlib.patches import Rectangle  # type: ignore
 import configparser
 
 # Define main directory
@@ -72,6 +47,70 @@ maindir = str("/media/luna/moralpom/globe/")
 mosaic_dem = maindir + "data/ArcticDEM/mosaic/arcticdem_mosaic_100m_v4.1_dem.tif"
 # Define spatial resolution of the strips
 res = 2
+
+######################################################################
+def intersection(supertile, subtile, strip_index_gdf, mosaic_index_gdf, archdir):
+    """
+    Computes the intersection between a the StripDEMs and the mosaic in a subtile.
+
+    Args:
+        supertile (str): Identifier for the supertile.
+        subtile (str): Identifier for the subtile.
+        strip_index_gdf (GeoDataFrame): GeoDataFrame containing strip index information.
+        mosaic_index_gdf (GeoDataFrame): GeoDataFrame containing mosaic index information.
+
+    Returns:
+        tuple: Contains the tile identifier, tile coordinates, tile bounds, and DataFrame of intersecting DEMs.
+    """
+
+    tile = f"{supertile}_{subtile}"
+    tile_id = tile + "_2m_v4.1"
+
+    # Temporary files for the clipped mosaic/stripDEMs
+    mosaic_dir = maindir + f"data/ArcticDEM/mosaic/temp/{tile}/"
+    strips_dir = maindir + f"data/ArcticDEM/temp2/{tile}/"
+
+    try:
+        tile_row = mosaic_index_gdf[mosaic_index_gdf["dem_id"] == tile_id]
+    except KeyError:
+        tile_row = mosaic_index_gdf[mosaic_index_gdf["DEM_ID"] == tile_id]
+
+    if tile_row.shape[0] == 1:
+        print(f"Processing tile: {tile}\n\n\n\n\n\n")
+
+        # Get the bounds of the tile cell
+        tile_coords = tile_row.iloc[0]["geometry"]
+        tile_bounds = tile_coords.bounds
+
+        # Crop the tile bounds to avoid overlapping between tiles
+        tile_bounds_mod = (
+            tile_bounds[0] + 100,
+            tile_bounds[1] + 100,
+            tile_bounds[2] - 100,
+            tile_bounds[3] - 100,
+        )
+        tile_bounds = tile_bounds_mod
+        #################################################################
+        # This section imports the list of "intersecting" StripDEMs
+        # (or creates it, if it had not been already done)
+
+        intersect_dems_df = process_tile_intersections(
+            tile=tile,
+            strip_index_gdf=strip_index_gdf,
+            archdir=archdir,
+        )
+
+        if intersect_dems_df.empty:
+            print("intersect_dems_df is empty (No StripDEMs in this tile).\
+                    \n Skip")
+            return None
+        else:
+            print("intersect_dems_df loaded - NOT empty")
+
+    else:
+        print(f"Tile {tile} not found in the mosaic index. Skipping...")
+    
+    return tile, tile_coords, tile_bounds, intersect_dems_df
 
 def process_tile_intersections(
     tile,
@@ -496,66 +535,3 @@ def configuration():
     
     return maindir, archdir, res, diffndv, strip_index_gdf, mosaic_index_gdf, stats_columns
 
-######################################################################
-def intersection(supertile, subtile, strip_index_gdf, mosaic_index_gdf, archdir):
-    """
-    Computes the intersection between a the StripDEMs and the mosaic in a subtile.
-
-    Args:
-        supertile (str): Identifier for the supertile.
-        subtile (str): Identifier for the subtile.
-        strip_index_gdf (GeoDataFrame): GeoDataFrame containing strip index information.
-        mosaic_index_gdf (GeoDataFrame): GeoDataFrame containing mosaic index information.
-
-    Returns:
-        tuple: Contains the tile identifier, tile coordinates, tile bounds, and DataFrame of intersecting DEMs.
-    """
-
-    tile = f"{supertile}_{subtile}"
-    tile_id = tile + "_2m_v4.1"
-
-    # Temporary files for the clipped mosaic/stripDEMs
-    mosaic_dir = maindir + f"data/ArcticDEM/mosaic/temp/{tile}/"
-    strips_dir = maindir + f"data/ArcticDEM/temp2/{tile}/"
-
-    try:
-        tile_row = mosaic_index_gdf[mosaic_index_gdf["dem_id"] == tile_id]
-    except KeyError:
-        tile_row = mosaic_index_gdf[mosaic_index_gdf["DEM_ID"] == tile_id]
-
-    if tile_row.shape[0] == 1:
-        print(f"Processing tile: {tile}\n\n\n\n\n\n")
-
-        # Get the bounds of the tile cell
-        tile_coords = tile_row.iloc[0]["geometry"]
-        tile_bounds = tile_coords.bounds
-
-        # Crop the tile bounds to avoid overlapping between tiles
-        tile_bounds_mod = (
-            tile_bounds[0] + 100,
-            tile_bounds[1] + 100,
-            tile_bounds[2] - 100,
-            tile_bounds[3] - 100,
-        )
-        tile_bounds = tile_bounds_mod
-        #################################################################
-        # This section imports the list of "intersecting" StripDEMs
-        # (or creates it, if it had not been already done)
-
-        intersect_dems_df = process_tile_intersections(
-            tile=tile,
-            strip_index_gdf=strip_index_gdf,
-            archdir=archdir,
-        )
-
-        if intersect_dems_df.empty:
-            print("intersect_dems_df is empty (No StripDEMs in this tile).\
-                    \n Skip")
-            return None
-        else:
-            print("intersect_dems_df loaded - NOT empty")
-
-    else:
-        print(f"Tile {tile} not found in the mosaic index. Skipping...")
-    
-    return tile, tile_coords, tile_bounds, intersect_dems_df

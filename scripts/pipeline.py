@@ -2,8 +2,11 @@
 This module contains the pipeline script for the project.
 
 """
+import gc
 import os
-os.g   
+# Go to the folder above scripts:
+os.chdir("/media/luna/moralpom/globe/github_ready/globe")
+
 #from scripts.functions_all import *
 from scripts.functions_config import configuration
 from scripts.functions_inter import intersection
@@ -13,7 +16,7 @@ from scripts.functions_stack import stackador
 def main():
     download_only = not bool(input("Download only? (Enter for YES)   "))
     maindir, archdir, res, diffndv, strip_index_gdf, mosaic_index_gdf, stats_columns = configuration()
-    supertiles = input("Enter the supertile(s) to process (e.g. '22_31, 22_32'): ").split(",")
+    supertiles = input("Enter the supertile(s) to process (e.g. '15_38, 16_38'): ").split(",")
     supertiles = [supertile.strip() for supertile in supertiles]
     subtiles = ["1_1", "1_2", "2_1", "2_2"]
     try:
