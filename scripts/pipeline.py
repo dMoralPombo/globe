@@ -10,7 +10,7 @@ os.chdir("/media/luna/moralpom/globe/github_ready/globe")
 #from scripts.functions_all import *
 from scripts.functions_config import configuration
 from scripts.functions_inter import intersection
-from scripts.functions_stats import stats_calculator
+from scripts.functions_stats import df_stats_calculator
 from scripts.functions_stack import stackador
 
 def main():
@@ -38,7 +38,7 @@ def main():
             tile, tile_coords, tile_bounds, intersect_dems_df = intersection(supertile, subtile, strip_index_gdf, mosaic_index_gdf, archdir)
 
             if download_only is False:
-                df_stats = stats_calculator(supertile, subtile, tile_bounds, intersect_dems_df, strip_index_gdf, mosaic_index_gdf, mosaic_dir, strips_dir, stats_columns)
+                df_stats = df_stats_calculator(supertile, subtile, tile_bounds, intersect_dems_df, strip_index_gdf, mosaic_index_gdf, mosaic_dir, strips_dir, stats_columns)
                 
                 stackador(df_stats, threshold, tile, tile_bounds)
                 print("\n\n\nStack run. Proceeding to next tile...\n\n\n")

@@ -279,6 +279,55 @@ def stack(
     # plot_final_raster(std_raster_path, tile, "sigma_max50", "magma", vmin=0, vmax=50)
     plt.close()
 
+    def plot_quad_subplot(raster1, raster2, raster3, raster4, titles):
+        """
+        Plot four rasters in a 2x2 grid within a single figure.
+
+        Parameters:
+        - raster1, raster2, raster3, raster4: The file paths or arrays for the rasters to be plotted.
+        - titles: List of titles for each raster.
+
+        Returns:
+        - A Matplotlib figure showing the four rasters in a 2x2 layout.
+        """
+        fig, axes = plt.subplots(2, 2, figsize=(10, 10))
+        ax_list = axes.flatten()
+
+        rasters = [raster1, raster2, raster3, raster4]
+        
+        for i, ax in enumerate(ax_list):
+            plot_final_raster(
+                raster_path=rasters[i],
+                ax=ax,
+                title=titles[i],
+                save_output=False  # Avoid saving directly; modify function to plot on passed `ax`
+            )
+        
+        plt.tight_layout()
+        plt.show()
+        
+        # Create output directories if they don't exist
+        image_dir = os.path.join(
+            maindir,
+            f"data/ArcticDEM/ArcticDEM_stripfiles/{tile[:5]}/images",
+        )
+
+        if not os.path.exists(image_dir):
+            create_directory_if_not_exists(image_dir)
+        # Save the PNG image
+        quad_save_path = os.path.join(image_dir, f"tile_quad.png")
+        plt.savefig(quad_save_path, dpi=700)
+
+
+    # Example usage:
+    plot_quad_subplot(
+        raster1=meandems_raster_path,
+        raster2=ndems_raster_path,
+        raster3=std_raster_path,
+        raster4=std_raster_path,
+        titles=["Mean elev.", "# DEMs", "sigma", "sigma"]
+    )
+
     # Clear arrays from memory
     del stackarrays, running_sum, running_squared_sum, valid_count, mean_dems
     del sigma, extent, transform

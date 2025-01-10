@@ -20,7 +20,7 @@ Functions:
         Processes a strip DEM to match the spatial extent of a fixed array, applies a bitmask, saves the result, and returns statistics.
     calculate_statistics(running_sum, running_squared_sum, valid_count):
         Calculates mean and standard deviation from running totals.
-    stats_calculator(supertile, subtile, tile_bounds, intersect_dems_df, strip_index_gdf, mosaic_index_gdf, mosaic_dir, strips_dir, stats_columns):
+    df_stats_calculator(supertile, subtile, tile_bounds, intersect_dems_df, strip_index_gdf, mosaic_index_gdf, mosaic_dir, strips_dir, stats_columns):
         Computes statistics for a tile and saves the results.
 
 @dmoralpombo (based in Jade Bowling's work)
@@ -50,7 +50,7 @@ mosaic_dem = maindir + "data/ArcticDEM/mosaic/arcticdem_mosaic_100m_v4.1_dem.tif
 res = 2
 
 ######################################################################
-def stats_calculator(supertile, subtile, tile_bounds, intersect_dems_df, strip_index_gdf, mosaic_index_gdf, mosaic_dir, strips_dir, stats_columns):
+def df_stats_calculator(supertile, subtile, tile_bounds, intersect_dems_df, strip_index_gdf, mosaic_index_gdf, mosaic_dir, strips_dir, stats_columns):
     """
     This function computes the statistics for a tile.
 
