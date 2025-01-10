@@ -133,7 +133,6 @@ def plot_final_raster(
         height, width = raster_data.shape
 
         # Round extent for consistent labeling
-        extent_r = [np.round(a, -1) for a in extent]
 
         # Create transformer from EPSG 3413 to EPSG 4326
         transformer = Transformer.from_crs("EPSG:3413", "EPSG:4326", always_xy=True)
@@ -240,19 +239,11 @@ def clip_raster_to_cell(raster, bounds, output_dir, nodata_value=-9999):
         clipped_fn (str): Path to the clipped raster file, or None if no overlap.
     """
     temp_dir = "/media/luna/moralpom/globe/data/ArcticDEM/temp/"
-    outputdir2 = "/media/luna/moralpom/globe/data/ArcticDEM/temp2/"
+    alternate_output_dir = "/media/luna/moralpom/globe/data/ArcticDEM/temp2/"
 
     # Ensure the output directory exists
     os.makedirs(output_dir, exist_ok=True)
-    os.makedirs(outputdir2, exist_ok=True)
-    # Ensure output directories exist
-    for directory in [output_dir, temp_dir]:
-        try:
-            os.makedirs(directory, exist_ok=True)
-        except Exception as e:
-            print(f"Error creating directory {directory}: {e}")
-            return None
-
+    os.makedirs(alternate_output_dir, exist_ok=True)
     if not os.path.exists(raster):
         print(f"Unzipping raster:\n {raster}")
         raster_n = raster[:-8]
@@ -315,11 +306,11 @@ def clip_raster_to_cell(raster, bounds, output_dir, nodata_value=-9999):
                 print(f"Error writing file {clipped_fn}: {e}")
                 try:
                     clipped_fn = os.path.join(
-                        outputdir2, f"clipped_{os.path.basename(raster)}"
+                        alternate_output_dir, f"clipped_{os.path.basename(raster)}"
                     )
-                    with rio.open(clipped_fn, "w", **clipped_meta) as dest:
-                        dest.write(clipped_data, 1)
-                        print("Temporary file stored in alterate directory", outputdir2)
+                        with rio.open(clipped_fn, "w", **clipped_meta) as dest:
+                            dest.write(clipped_data, 1)
+                            print("Temporary file stored in alternate directory", alternate_output_dir)
 
                 except Exception as f:
                     print(
@@ -346,7 +337,7 @@ def plot_clipped_rasters(raster1, raster2, bounds=None, title=None):
         raster2 (str): Path to the second raster file.
         bounds (tuple, optional): Bounds of the tile cell (xmin, ymin, xmax, ymax). Defaults to None.
         title (str, optional): Title of the
-    """
+        title (str, optional): Title of the plot. If provided, it should contain exactly two parts separated by a slash ("/"), one for each raster.
     # Open the clipped rasters
     with rio.open(raster1) as src1, rio.open(raster2) as src2:
         fig, axes = plt.subplots(1, 2, figsize=(15, 8))
@@ -401,7 +392,7 @@ def find_and_unzip(pathfile):
         pathfile (str): name of the file (as in the df_stats pandas DF)
 
     Returns:
-        dict: Dictionary containing statistics.
+        str: Path to the .tif file, or None if not found.
 
     """
     tif_pattern = pathfile + "*_dem.tif"
@@ -602,8 +593,8 @@ def reduce_strip(
 
         # Get the offsets to place the clipped data into the 25000x25000 array
         x_min, y_max = tile_bounds[0], tile_bounds[3]
-        col_start = int((strip_transform.c - x_min) / strip_transform.a)
-        row_start = int((y_max - strip_transform.f) / -strip_transform.e)
+        col_start = max(0, int((strip_transform.c - x_min) / strip_transform.a))
+        row_start = max(0, int((y_max - strip_transform.f) / -strip_transform.e))
         col_end = col_start + strip_data.shape[1]
         row_end = row_start + strip_data.shape[0]
 
@@ -611,7 +602,7 @@ def reduce_strip(
         tile_array[row_start:row_end, col_start:col_end] = strip_data
 
         # Apply the bitmask, if available
-        if bitmask_clipped_fn:
+        if bitmask_clipped_fn and os.path.exists(bitmask_clipped_fn):
             with rio.open(bitmask_clipped_fn) as mask_src:
                 bitmask_data = mask_src.read(1)
                 tile_array[row_start:row_end, col_start:col_end][
@@ -771,8 +762,11 @@ def stack(
     # Generate the extent (coordinates for the axes)
     extent = [x0, y0, x1, y1]
 
+    # Define resolution
+    resolution = 2.0
+
     # Pre-calculate affine transformation
-    transform = Affine(2.0, 0.0, x0, 0.0, -2.0, y1)
+    transform = Affine(resolution, 0.0, x0, 0.0, -resolution, y1)
 
     cellshape = (25000, 25000)
 
@@ -908,7 +902,7 @@ def process_array_new(npy_file, running_sum, running_squared_sum, valid_count):
     # Use memory mapping to load large files efficiently
     # print("array loaded with mmap")
     if loaded_array.shape != running_sum.shape:
-        print(f"npy_file {npy_file} has a weird shape")
+        print(f"Error: npy_file {npy_file} has a different shape ({loaded_array.shape}) than expected ({running_sum.shape}). Skipping this file.")
         return
 
     # Create a mask for valid (non -9999) values
@@ -1050,7 +1044,6 @@ def check_intersection(strip_geom, tile_coords, area_threshold=0.01):
     if isinstance(strip_geom, Polygon):
         overlap_geom = strip_geom.intersection(tile_coords)
 
-        #return strip_geom.intersects(tile_coords)
     elif isinstance(strip_geom, MultiPolygon):
         overlap_geom = MultiPolygon(
             [poly.intersection(tile_coords) for poly in strip_geom.geoms]
@@ -1093,7 +1086,8 @@ def handle_strip_download(geocell, url, archdir):
         extracted_tar_path = extracted_dir[:-3]
         with gzip.open(extracted_dir, "rb") as f_gz_in:
             with open(extracted_tar_path, "wb") as f_tar_out:
-                shutil.copyfileobj(f_gz_in, f_tar_out)
+        if not os.path.exists(extracted_tar_path):
+            with tarfile.open(extracted_tar_path, "r") as tar:
 
         with tarfile.open(extracted_tar_path, "r") as tar:
             tar.extractall(extracted_dir)
@@ -1247,6 +1241,7 @@ def download_strips(intersect_dems_df):
             futures = [
                 executor.submit(download_file, geocell_folder, url)
                 for geocell_folder, url in missing_files
+                if not os.path.exists(os.path.join(geocell_folder, url.split('/')[-1]))
             ]
 
             # Wait for all tasks to complete
