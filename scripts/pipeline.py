@@ -2,8 +2,13 @@
 This module contains the pipeline script for the project.
 
 """
-
-from scripts.functions_all import *
+import os
+os.g   
+#from scripts.functions_all import *
+from scripts.functions_config import configuration
+from scripts.functions_inter import intersection
+from scripts.functions_stats import stats_calculator
+from scripts.functions_stack import stackador
 
 def main():
     download_only = not bool(input("Download only? (Enter for YES)   "))

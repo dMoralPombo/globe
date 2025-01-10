@@ -10,45 +10,18 @@ To be called from calc_advanced.py.
 Functions:
     plot_final_raster(raster_path, tile, transform, cbar_title, cmap, add_grid, vmin, vmax):
         Plots the main output rasters: number of DEMs used and standard deviation of elevation per pixel.
-    clip_raster_to_cell(raster, bounds, output_dir, nodata_value):
-        Clips a raster to a specified tile cell defined by its bounds.
-    plot_clipped_rasters(raster1, raster2, bounds, title):
-        Plots two clipped rasters side by side with tile bounds overlaid.
-    find_and_unzip(pathfile):
-        Finds a .tif file and/or unzips the .gz file if necessary.
-    apply_bitmask_to_dem(stripdem_clipped_fn, bitmask_clipped_fn, diffndv):
-        Applies a bitmask to a DEM and saves the masked DEM.
-    warp_and_calculate_stats(mosaic_clipped_fn, stripdem_clipped_fn):
-        Warps rasters to the same resolution, extent, and projection, and calculates statistics.
-    reduce_strip(strip_name, tile_bounds, strips_dir, mosaic_clipped_fn, geocell_i, diffndv, plotting, temp_dir):
-        Processes a strip DEM to match the spatial extent of a fixed array, applies a bitmask, saves the result, and returns statistics.
     initialise_running_totals(cellshape, dtype):
         Initializes arrays for cumulative calculations.
-    process_array(npy_file, running_sum, running_squared_sum, valid_count):
-        Loads a numpy array, updates running totals, and clears memory.
+    process_array_new(npy_file, running_sum, running_squared_sum, valid_count):
+        Loads a numpy array, updates running totals, and clears memory using memory mapping.
     calculate_statistics(running_sum, running_squared_sum, valid_count):
         Calculates mean and standard deviation from running totals.
     save_raster(data, path, transform, nodata_value):
         Saves a numpy array to a GeoTIFF raster file.
     stack(stackarrays, tile, tile_bounds, plot_every_n, transform):
         Handles the processing of the last part of the pipeline, creating the stdev and nDEMs maps.
-    process_array_new(npy_file, running_sum, running_squared_sum, valid_count):
-        Loads a numpy array, updates running totals, and clears memory using memory mapping.
-    process_tile_intersections(tile, strip_index_gdf, archdir):
-    check_intersection(strip_geom, tile_coords):
-    handle_strip_download(geocell, url, archdir):
-    handle_tile_download(tile):
-    download_strips(intersect_dems_df):
-        Downloads all strips from a DataFrame of intersecting DEMs.
-    download_file(geocell_folder, url):
-        Downloads a file using wget.
-    configuration():
-        Reads configuration settings from a config file and returns relevant paths and parameters.
-    intersection(supertile, subtile, strip_index_gdf, mosaic_index_gdf):
-        Computes the intersection between the StripDEMs and the mosaic in a subtile.
-    stats_calculator(supertile, subtile, tile_bounds, intersect_dems_df, strip_index_gdf, mosaic_index_gdf, mosaic_dir, strips_dir, stats_columns):
-        Computes statistics for a tile and saves the results.
     stackador(df_stats, threshold, tile, tile_bounds):
+        Filters and stacks arrays based on a threshold and tile information.
 
 @dmoralpombo (based in Jade Bowling's work)
 """
