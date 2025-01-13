@@ -283,12 +283,13 @@ def stack(
     # plot_final_raster(std_raster_path, tile, "sigma_max50", "magma", vmin=0, vmax=50)
     plt.close()
 
-    def plot_quad_subplot(raster1, raster2, raster3, raster4):
+    def plot_quad_subplot(raster1, raster2, raster3, raster4, titles):
         """
         Plot four rasters in a 2x2 grid within a single figure.
 
         Parameters:
         - raster1, raster2, raster3, raster4: The file paths or arrays for the rasters to be plotted.
+        - titles: A list of titles for each subplot.
 
         Returns:
         - A Matplotlib figure showing the four rasters in a 2x2 layout.
