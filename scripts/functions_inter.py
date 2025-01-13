@@ -102,14 +102,14 @@ def intersection(supertile, subtile, strip_index_gdf, mosaic_index_gdf, archdir)
 
         if intersect_dems_df.empty:
             print("intersect_dems_df is empty (No StripDEMs in this tile).\nSkip")
-            return (), (), pd.DataFrame()
+            return (), pd.DataFrame()
         else:
             print("intersect_dems_df loaded - NOT empty")
 
     else:
         print(f"Tile {tile} not found in the mosaic index. Skipping...")
 
-    return tile_coords, tile_bounds, intersect_dems_df
+    return tile_bounds, intersect_dems_df
 
 ######################################################################
 

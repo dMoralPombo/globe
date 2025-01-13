@@ -300,10 +300,10 @@ def stack(
         ax_list = axes.flatten()
 
         for ax, raster in zip(ax_list, [raster1, raster2, raster3, raster4]):
-            title = titles[ax_list.index(ax)]
+            title = "# DEMs"
             if title == "sigma":
                 cmap = "magma"
-                vmin, vmax = 0, 50
+                vmin, vmax = 0, 30
             elif title == "Mean elev.":
                 cmap = "terrain"
                 vmin, vmax = None, None
@@ -418,8 +418,8 @@ def initialise_running_totals(cellshape=(25000, 25000), dtype=np.float64):
     print("Arrays initialised.")
     return running_sum, running_squared_sum, valid_count
 
-
 ##########################################################################################
+
 
 def plot_final_raster(
     raster_path,
@@ -466,7 +466,7 @@ def plot_final_raster(
 
         # Transform primary axis ticks to secondary system (EPSG 4326)
         lon_ticks, _ = transformer.transform(x_ticks, [bottom] * len(x_ticks))
-        _, lat_ticks = transformer.transform([left] * len(y_ticks), y_ticks[::-1])
+        _, lat_ticks = transformer.transform([left] * len(y_ticks), y_ticks)
 
         # Plotting the raster data
         fig, ax = plt.subplots(figsize=(8, 6))

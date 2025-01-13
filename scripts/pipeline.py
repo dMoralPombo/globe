@@ -50,7 +50,7 @@ def main():
             strips_dir = maindir + f"data/ArcticDEM/temp2/{tile}/"
 
             # Obtain the coords of the tile and the list of intersecting DEMs
-            tile_coords, tile_bounds, intersect_dems_df = intersection(
+            tile_bounds, intersect_dems_df = intersection(
                 supertile,
                 subtile,
                 strip_index_gdf,
