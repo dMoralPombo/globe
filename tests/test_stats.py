@@ -32,7 +32,7 @@ def test_clip_raster_to_cell(mock_makedirs, mock_exists, mock_rio_open):
     mock_exists.side_effect = lambda path: path == raster
     mock_rio_open.return_value.__enter__.return_value.read.return_value = np.array([[1, 2], [3, 4]])
     mock_rio_open.return_value.__enter__.return_value.bounds = BoundingBox(5, 5, 25, 25)
-    #mock_rio_open.return_value.__enter__.return_value.transform = "transform"
+    # mock_rio_open.return_value.__enter__.return_value.transform = "transform"
     mock_rio_open.return_value.__enter__.return_value.transform = Affine(2.0, 0.0, 0.0, 0.0, -2.0, 0.0)
 
     # Call the function
@@ -44,6 +44,7 @@ def test_clip_raster_to_cell(mock_makedirs, mock_exists, mock_rio_open):
     mock_makedirs.assert_any_call(output_dir, exist_ok=True)
     assert clipped_fn is not None
     assert clipped_fn.startswith(output_dir)
+
 
 @patch("glob.glob")
 @patch("gzip.open")

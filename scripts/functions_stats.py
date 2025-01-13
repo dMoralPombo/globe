@@ -20,26 +20,26 @@ Functions:
         Processes a strip DEM to match the spatial extent of a fixed array, applies a bitmask, saves the result, and returns statistics.
     calculate_statistics(running_sum, running_squared_sum, valid_count):
         Calculates mean and standard deviation from running totals.
-    df_stats_calculator(supertile, subtile, tile_bounds, intersect_dems_df, strip_index_gdf, mosaic_index_gdf, mosaic_dir, strips_dir, stats_columns):
+    df_stats_calculator(supertile, subtile, tile_bounds, intersect_dems_df, mosaic_index_gdf, mosaic_dir, strips_dir, stats_columns):
         Computes statistics for a tile and saves the results.
 
 @dmoralpombo (based in Jade Bowling's work)
 """
 import os
 import sys
-import geopandas as gpd # type: ignore
-from shapely.geometry import box # type: ignore
+import geopandas as gpd  # type: ignore
+from shapely.geometry import box   # type: ignore
 import numpy as np
-from pygeotools.lib import iolib, malib, warplib # type: ignore
-from tqdm import tqdm # type: ignore
-import pandas as pd # type: ignore
-import matplotlib.pyplot as plt # type: ignore
-import rasterio as rio # type: ignore
-from rasterio.windows import from_bounds # type: ignore
-import gzip # type: ignore
+from pygeotools.lib import iolib, malib, warplib  # type: ignore
+from tqdm import tqdm  # type: ignore
+import pandas as pd  # type: ignore
+import matplotlib.pyplot as plt  # type: ignore
+import rasterio as rio  # type: ignore
+from rasterio.windows import from_bounds  # type: ignore
+import gzip  # type: ignore
 import shutil
 import glob
-import tarfile # type: ignore
+import tarfile  # type: ignore
 import gc
 
 # Define main directory
@@ -49,8 +49,9 @@ mosaic_dem = maindir + "data/ArcticDEM/mosaic/arcticdem_mosaic_100m_v4.1_dem.tif
 # Define spatial resolution of the strips
 res = 2
 
+
 ######################################################################
-def df_stats_calculator(supertile, subtile, tile_bounds, intersect_dems_df, strip_index_gdf, mosaic_index_gdf, mosaic_dir, strips_dir, stats_columns):
+def df_stats_calculator(supertile, subtile, tile_bounds, intersect_dems_df, mosaic_index_gdf, mosaic_dir, strips_dir, stats_columns):
     """
     This function computes the statistics for a tile.
 
@@ -59,7 +60,6 @@ def df_stats_calculator(supertile, subtile, tile_bounds, intersect_dems_df, stri
         subtile (str): The identifier for the subtile.
         tile_bounds (tuple): The geographical bounds of the tile.
         intersect_dems_df (pd.DataFrame): DataFrame containing intersecting DEMs information.
-        strip_index_gdf (gpd.GeoDataFrame): GeoDataFrame containing strip index information.
         mosaic_index_gdf (gpd.GeoDataFrame): GeoDataFrame containing mosaic index information.
         mosaic_dir (str): Directory path where mosaic DEMs are stored.
         strips_dir (str): Directory path where strip DEMs are stored.
@@ -241,8 +241,7 @@ def df_stats_calculator(supertile, subtile, tile_bounds, intersect_dems_df, stri
 
     # Save remaining data to CSV file after loop ends
     df_stats.to_csv(output_stats_file, mode="w", index=False)
-    print("df_stats saved definitely. \n\n ",
-            df_stats)
+    print("df_stats saved definitely. \n\n ", df_stats)
     
     # Make sure to delete the temporary files after processing
     if os.path.exists(mosaic_clipped_fn):
@@ -472,6 +471,7 @@ def find_and_unzip(pathfile):
 
 ######################################################################
 
+
 def warp_and_calculate_stats(mosaic_clipped_fn, stripdem_clipped_fn):
     """
     Warp rasters to the same resolution, extent, and projection, and calculate statistics.
@@ -511,6 +511,7 @@ def warp_and_calculate_stats(mosaic_clipped_fn, stripdem_clipped_fn):
     return diff_stats, mean_r2, rmse
 
 ######################################################################
+
 
 def reduce_strip(
     strip_name,

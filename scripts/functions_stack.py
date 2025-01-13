@@ -27,16 +27,18 @@ Functions:
 """
 import os
 import numpy as np
-from tqdm import tqdm # type: ignore
-import pandas as pd # type: ignore
-import matplotlib.pyplot as plt # type: ignore
-import rasterio as rio # type: ignore
-from rasterio.transform import from_origin # type: ignore
-from pyproj import Transformer # type: ignore
+from tqdm import tqdm  # type: ignore
+import pandas as pd  # type: ignore
+import matplotlib.pyplot as plt  # type: ignore
+import rasterio as rio  # type: ignore
+from rasterio.transform import from_origin  # type: ignore
+from pyproj import Transformer  # type: ignore
 import glob
-from affine import Affine # type: ignore
+from affine import Affine  # type: ignore
 import gc
 
+
+# Define reusable utility functions
 def create_directory_if_not_exists(directory):
     """
     Create a directory if it does not exist.
@@ -47,12 +49,14 @@ def create_directory_if_not_exists(directory):
     if not os.path.exists(directory):
         os.makedirs(directory)
 
+
 # Define main directory
 maindir = str("/media/luna/moralpom/globe/")
 # and mosaic's directory
 mosaic_dem = maindir + "data/ArcticDEM/mosaic/arcticdem_mosaic_100m_v4.1_dem.tif"
 # Define spatial resolution of the strips
 res = 2
+
 
 def stackador(df_stats, threshold, tile, tile_bounds):
     """
@@ -101,12 +105,13 @@ def stackador(df_stats, threshold, tile, tile_bounds):
 
 ######################################################################
 
+
 def stack(
     stackarrays,
     tile,
     tile_bounds,
     plot_every_n,  # Plot one out of every N DEMs
-    #transform=None,
+    # transform=None,
 ):
     """
     This is a function to handle the processing of the last part of the pipeline,
@@ -181,7 +186,6 @@ def stack(
             del data_mask
             gc.collect()
 
-
     # Process each saved array
     for idx, npy_file in enumerate(tqdm(stackarrays, desc="Stacking DEM arrays")):
         try:
@@ -190,7 +194,7 @@ def stack(
             process_array_new(npy_file, running_sum, running_squared_sum, valid_count)
 
             # Plot the DEMs (every n)
-            plot_dem(stackarrays, valid_count, idx, extent, tile, plot_every_n)
+            plot_dem(valid_count, idx, extent, tile, plot_every_n)
 
             print(f"DEM (#{idx}) processed")
 
@@ -279,13 +283,12 @@ def stack(
     # plot_final_raster(std_raster_path, tile, "sigma_max50", "magma", vmin=0, vmax=50)
     plt.close()
 
-    def plot_quad_subplot(raster1, raster2, raster3, raster4, titles):
+    def plot_quad_subplot(raster1, raster2, raster3, raster4):
         """
         Plot four rasters in a 2x2 grid within a single figure.
 
         Parameters:
         - raster1, raster2, raster3, raster4: The file paths or arrays for the rasters to be plotted.
-        - titles: List of titles for each raster.
 
         Returns:
         - A Matplotlib figure showing the four rasters in a 2x2 layout.
@@ -293,16 +296,32 @@ def stack(
         fig, axes = plt.subplots(2, 2, figsize=(10, 10))
         ax_list = axes.flatten()
 
-        rasters = [raster1, raster2, raster3, raster4]
-        
-        for i, ax in enumerate(ax_list):
+        for ax, raster in zip(ax_list, [raster1, raster2, raster3, raster4]):
+            title = titles[ax_list.index(ax)]
+            if title == "sigma":
+                cmap = "magma"
+                vmin, vmax = 0, 50
+            elif title == "Mean elev.":
+                cmap = "terrain"
+                vmin, vmax = None, None
+            elif title == "# DEMs":
+                cmap = "viridis"
+                vmin, vmax = None, None
+            else:
+                cmap = "viridis"
+                vmin, vmax = None, None
+
             plot_final_raster(
-                raster_path=rasters[i],
-                ax=ax,
-                title=titles[i],
-                save_output=False  # Avoid saving directly; modify function to plot on passed `ax`
+                raster,
+                tile,
+                Affine(2.0, 0.0, 0.0, 0.0, -2.0, 0.0),
+                title,
+                cmap,
+                add_grid=True,
+                vmin=vmin,
+                vmax=vmax,
             )
-        
+
         plt.tight_layout()
         plt.show()
         
@@ -333,6 +352,7 @@ def stack(
     del sigma, extent, transform
 
 #########################################################
+
 
 def process_array_new(npy_file, running_sum, running_squared_sum, valid_count):
     """
