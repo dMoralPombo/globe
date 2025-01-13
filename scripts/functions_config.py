@@ -1,6 +1,6 @@
 """
-This module contains functions for processing and analyzing Digital Elevation Models (DEMs) 
-using various geospatial libraries. The main functionalities include clipping rasters, 
+This module contains functions for processing and analyzing Digital Elevation Models (DEMs)
+using various geospatial libraries. The main functionalities include clipping rasters,
 plotting rasters, applying bitmasks, warping and calculating statistics, and handling file
 downloads and extractions. The module is designed to work with ArcticDEM data and includes
 functions for processing tile intersections, calculating statistics, and stacking arrays.
@@ -14,7 +14,7 @@ Functions:
 @dmoralpombo (based in Jade Bowling's work)
 """
 
-import geopandas as gpd # type: ignore
+import geopandas as gpd  # type: ignore
 import configparser
 
 # Define main directory
@@ -26,8 +26,20 @@ res = 2
 
 ######################################################################
 
+
 def configuration():
-    
+    """
+    This function reads a configuration file to retrieve various paths and parameters required for processing.
+    It also loads and reprojects shapefiles for further use.
+
+        maindir (str): Main directory path.
+        archdir (str): Archive directory path.
+        res (int): Spatial resolution of the strips.
+        diffndv (int): No data value for difference calculations.
+        strip_index_gdf (GeoDataFrame): GeoDataFrame containing the strip index shapefile data.
+        mosaic_index_gdf (GeoDataFrame): GeoDataFrame containing the mosaic index shapefile data.
+        stats_columns (list): List of column names for statistics.
+    """
     # Read config
     config = configparser.ConfigParser()
     config.read("/media/luna/moralpom/globe/github_ready/globe/config.cfg")
@@ -50,7 +62,7 @@ def configuration():
 
     # Retrieve stats column names
     stats_columns = config.get("stats", "stats_columns").split(",")
-    stats_columns = [column.strip() for column in stats_columns]    
+    stats_columns = [column.strip() for column in stats_columns]
 
     # Print to verify
     print(f"Main Directory: {maindir}")
@@ -80,8 +92,8 @@ def configuration():
     strip_index_gdf = strip_index_gdf.to_crs("EPSG:3413")
 
     # Load the mosaic shapefile
-    mosaic_index_path = "/media/luna/moralpom/globe/data/ArcticDEM/mosaic/ArcticDEM_Mosaic_Index_latest_shp/ArcticDEM_Mosaic_Index_v4_1_2m.shp"
+    mosaic_index_path = maindir + "/data/ArcticDEM/mosaic/ArcticDEM_Mosaic_Index_latest_shp/ArcticDEM_Mosaic_Index_v4_1_2m.shp"
     # mosaic_index_path = f"/media/luna/archive/SATS/OPTICAL/ArcticDEM/ArcticDEM/mosaic/v4.1/2m/{supertile}/index/{tile}_2m_v4.1_index.shp"
     mosaic_index_gdf = gpd.read_file(mosaic_index_path)
-    
+
     return maindir, archdir, res, diffndv, strip_index_gdf, mosaic_index_gdf, stats_columns

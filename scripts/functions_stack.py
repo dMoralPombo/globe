@@ -1,6 +1,6 @@
 """
-This module contains functions for processing and analyzing Digital Elevation Models (DEMs) 
-using various geospatial libraries. The main functionalities include clipping rasters, 
+This module contains functions for processing and analyzing Digital Elevation Models (DEMs)
+using various geospatial libraries. The main functionalities include clipping rasters,
 plotting rasters, applying bitmasks, warping and calculating statistics, and handling file
 downloads and extractions. The module is designed to work with ArcticDEM data and includes
 functions for processing tile intersections, calculating statistics, and stacking arrays.
@@ -28,10 +28,9 @@ Functions:
 import os
 import numpy as np
 from tqdm import tqdm  # type: ignore
-import pandas as pd  # type: ignore
 import matplotlib.pyplot as plt  # type: ignore
 import rasterio as rio  # type: ignore
-from rasterio.transform import from_origin  # type: ignore
+# from rasterio.transform import from_origin  # type: ignore
 from pyproj import Transformer  # type: ignore
 import glob
 from affine import Affine  # type: ignore
@@ -62,7 +61,8 @@ def stackador(df_stats, threshold, tile, tile_bounds):
     """
     Filters and stacks arrays based on a threshold and tile information.
 
-        df_stats (pd.DataFrame): DataFrame containing statistics with a column "std_dh" for standard deviation of height differences and a column "filename" for core filenames.
+        df_stats (pd.DataFrame): DataFrame containing statistics with a column "std_dh" for standard
+                                deviation of height differences and a column "filename" for core filenames.
         threshold (float): Threshold value for filtering the standard deviation of height differences.
         tile (str): Tile identifier used in directory paths.
         tile_bounds (tuple): Bounds of the tile used in the stacking process.
@@ -151,7 +151,7 @@ def stack(
 
     # Initialize running totals
     running_sum, running_squared_sum, valid_count = initialise_running_totals(cellshape)
-    
+
     # Process and plot the DEMs
     def plot_dem(valid_count, idx, extent, tile, plot_every_n):
         """
@@ -165,7 +165,7 @@ def stack(
             plot_every_n (int): Frequency of plotting. Plots one out of every N DEMs.
         """
         if isinstance(plot_every_n, int) and idx % plot_every_n == 0:
-            data_mask = valid_count > 0
+            # data_mask = valid_count > 0
             fig, ax = plt.subplots(figsize=(8, 6))
             img = ax.imshow(
                 valid_count, extent=extent, cmap="viridis", origin="upper"
@@ -182,8 +182,8 @@ def stack(
 
             # Clean up the loaded array and delete variable data_mask
             plt.close(fig)
-            data_mask = []
-            del data_mask
+            # data_mask = []
+            # del data_mask
             gc.collect()
 
     # Process each saved array
@@ -214,12 +214,13 @@ def stack(
             running_sum (np.array): Running sum of DEM values.
             running_squared_sum (np.array): Running sum of squared DEM values.
             valid_count (np.array): Running count of valid DEM values.
-        
+
         Returns:
             mean_dems (np.array): Mean elevation values.
             sigma (np.array): Standard deviation of elevation values.
         """
         mean_dems = running_sum / valid_count
+        sigma = np.sqrt((running_squared_sum / valid_count) - (mean_dems**2))
         with np.errstate(divide='ignore', invalid='ignore'):
             mean_dems = np.where(valid_count != 0, running_sum / valid_count, np.nan)
         mean_dems[valid_count == 0] = np.nan
@@ -239,10 +240,11 @@ def stack(
 
     # Plot the rasters
     plot_final_raster(
-        ndems_raster_path, 
-        tile, transform, 
+        ndems_raster_path,
+        tile,
+        transform,
         "ndems",
-        "viridis", 
+        "viridis",
         add_grid=True
     )
     plt.close()
@@ -325,7 +327,7 @@ def stack(
 
         plt.tight_layout()
         plt.show()
-        
+
         # Create output directories if they don't exist
         image_dir = os.path.join(
             maindir,
@@ -335,9 +337,8 @@ def stack(
         if not os.path.exists(image_dir):
             create_directory_if_not_exists(image_dir)
         # Save the PNG image
-        quad_save_path = os.path.join(image_dir, f"tile_quad.png")
+        quad_save_path = os.path.join(image_dir, f"tile_quad_{tile}.png")
         plt.savefig(quad_save_path, dpi=700)
-
 
     # Example usage:
     plot_quad_subplot(
@@ -454,7 +455,7 @@ def plot_final_raster(
         # Get raster dimensions
         height, width = raster_data.shape
         # Round extent for consistent labeling
-        extent_r = [np.round(a, -1) for a in extent]
+        # extent_r = [np.round(a, -1) for a in extent] # deprecated
 
         # Create transformer from EPSG 3413 to EPSG 4326
         transformer = Transformer.from_crs("EPSG:3413", "EPSG:4326", always_xy=True)

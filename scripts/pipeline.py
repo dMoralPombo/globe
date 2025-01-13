@@ -1,6 +1,7 @@
 """
 Functions:
-    main(): The main function that runs the pipeline script. It handles user inputs, configuration, and processing of supertiles and subtiles.
+    main(): The main function that runs the pipeline script. It handles user inputs,
+    configuration, and processing of supertiles and subtiles.
 Modules:
     gc: Garbage collection interface.
     os: Miscellaneous operating system interfaces.
@@ -9,7 +10,8 @@ Modules:
     df_stats_calculator: Function to calculate statistics for the DEMs.
     stackador: Function to stack DEMs based on calculated statistics.
 Usage:
-    Run this script directly to execute the pipeline. The script will prompt for user inputs to control the processing flow.
+    Run this script directly to execute the pipeline. The script will prompt for user
+    inputs to control the processing flow.
 
 This module contains the pipeline script for the project.
 
@@ -43,21 +45,32 @@ def main():
         for subtile in subtiles:
             # intersection(supertile, subtile, strip_index_gdf, mosaic_index_gdf, archdir)
             tile = f"{supertile}_{subtile}"
-            tile_id = tile + "_2m_v4.1"
-
+            # tile_id = tile + "_2m_v4.1"
             mosaic_dir = maindir + f"data/ArcticDEM/mosaic/temp/{tile}/"
             strips_dir = maindir + f"data/ArcticDEM/temp2/{tile}/"
-            
-            tile, tile_coords, tile_bounds, intersect_dems_df = intersection(supertile, subtile, strip_index_gdf, mosaic_index_gdf, archdir)
 
+            # Obtain the coords of the tile and the list of intersecting DEMs
+            tile_coords, tile_bounds, intersect_dems_df = intersection(
+                supertile,
+                subtile,
+                strip_index_gdf,
+                mosaic_index_gdf,
+                archdir
+            )
+
+            # Calculate statistics for the DEMs, if download_only is False
             if download_only is False:
-                df_stats = df_stats_calculator(supertile, subtile, tile_bounds, intersect_dems_df, mosaic_index_gdf, mosaic_dir, strips_dir, stats_columns)
-                
+                df_stats = df_stats_calculator(supertile,
+                                               subtile,
+                                               tile_bounds,
+                                               intersect_dems_df,
+                                               mosaic_dir,
+                                               strips_dir,
+                                               stats_columns)
+
                 stackador(df_stats, threshold, tile, tile_bounds)
                 print("\n\n\nStack run. Proceeding to next tile...\n\n\n")
                 gc.collect()
-                
-    gc.collect()
 
 
 if __name__ == "__main__":

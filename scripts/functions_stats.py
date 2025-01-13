@@ -1,6 +1,6 @@
 """
-This module contains functions for processing and analyzing Digital Elevation Models (DEMs) 
-using various geospatial libraries. The main functionalities include clipping rasters, 
+This module contains functions for processing and analyzing Digital Elevation Models (DEMs)
+using various geospatial libraries. The main functionalities include clipping rasters,
 plotting rasters, applying bitmasks, warping and calculating statistics, and handling file
 downloads and extractions. The module is designed to work with ArcticDEM data and includes
 functions for processing tile intersections, calculating statistics, and stacking arrays.
@@ -17,25 +17,26 @@ Functions:
     warp_and_calculate_stats(mosaic_clipped_fn, stripdem_clipped_fn):
         Warps rasters to the same resolution, extent, and projection, and calculates statistics.
     reduce_strip(strip_name, tile_bounds, strips_dir, mosaic_clipped_fn, geocell_i, diffndv, plotting, temp_dir):
-        Processes a strip DEM to match the spatial extent of a fixed array, applies a bitmask, saves the result, and returns statistics.
+        Processes a strip DEM to match the spatial extent of a fixed array, applies a bitmask, saves the result,
+        and returns statistics.
     calculate_statistics(running_sum, running_squared_sum, valid_count):
         Calculates mean and standard deviation from running totals.
-    df_stats_calculator(supertile, subtile, tile_bounds, intersect_dems_df, mosaic_index_gdf, mosaic_dir, strips_dir, stats_columns):
+    df_stats_calculator(supertile, subtile, tile_bounds, intersect_dems_df, mosaic_dir, strips_dir, stats_columns):
         Computes statistics for a tile and saves the results.
 
 @dmoralpombo (based in Jade Bowling's work)
 """
 import os
-import sys
-import geopandas as gpd  # type: ignore
-from shapely.geometry import box   # type: ignore
+# import sys
+# import geopandas as gpd  # type: ignore
+# from shapely.geometry import box   # type: ignore
 import numpy as np
 from pygeotools.lib import iolib, malib, warplib  # type: ignore
 from tqdm import tqdm  # type: ignore
 import pandas as pd  # type: ignore
 import matplotlib.pyplot as plt  # type: ignore
 import rasterio as rio  # type: ignore
-from rasterio.windows import from_bounds  # type: ignore
+# from rasterio.windows import from_bounds  # type: ignore
 import gzip  # type: ignore
 import shutil
 import glob
@@ -51,7 +52,7 @@ res = 2
 
 
 ######################################################################
-def df_stats_calculator(supertile, subtile, tile_bounds, intersect_dems_df, mosaic_index_gdf, mosaic_dir, strips_dir, stats_columns):
+def df_stats_calculator(supertile, subtile, tile_bounds, intersect_dems_df, mosaic_dir, strips_dir, stats_columns):
     """
     This function computes the statistics for a tile.
 
@@ -60,7 +61,6 @@ def df_stats_calculator(supertile, subtile, tile_bounds, intersect_dems_df, mosa
         subtile (str): The identifier for the subtile.
         tile_bounds (tuple): The geographical bounds of the tile.
         intersect_dems_df (pd.DataFrame): DataFrame containing intersecting DEMs information.
-        mosaic_index_gdf (gpd.GeoDataFrame): GeoDataFrame containing mosaic index information.
         mosaic_dir (str): Directory path where mosaic DEMs are stored.
         strips_dir (str): Directory path where strip DEMs are stored.
         stats_columns (list): List of column names for the statistics DataFrame.
@@ -242,15 +242,15 @@ def df_stats_calculator(supertile, subtile, tile_bounds, intersect_dems_df, mosa
     # Save remaining data to CSV file after loop ends
     df_stats.to_csv(output_stats_file, mode="w", index=False)
     print("df_stats saved definitely. \n\n ", df_stats)
-    
+
     # Make sure to delete the temporary files after processing
     if os.path.exists(mosaic_clipped_fn):
         os.remove(mosaic_clipped_fn)
 
     return df_stats
 
-
 ######################################################################
+
 
 def clip_raster_to_cell(raster, bounds, output_dir, nodata_value=-9999):
     """
@@ -317,7 +317,7 @@ def clip_raster_to_cell(raster, bounds, output_dir, nodata_value=-9999):
             clipped_data = src.read(1, window=window)
 
             # Mask the NoData value (-9999) in the clipped data
-            masked_data = np.ma.masked_equal(clipped_data, nodata_value)
+            # masked_data = np.ma.masked_equal(clipped_data, nodata_value)
 
             # Update metadata for the clipped raster
             clipped_meta = src.meta.copy()
@@ -370,7 +370,8 @@ def plot_clipped_rasters(raster1, raster2, bounds=None, title=None):
         raster1 (str): Path to the first raster file.
         raster2 (str): Path to the second raster file.
         bounds (tuple, optional): Bounds of the tile cell (xmin, ymin, xmax, ymax). Defaults to None.
-        title (str, optional): Title of the plot. If provided, it should contain exactly two parts separated by a slash (/) for the two subplots.
+        title (str, optional): Title of the plot. If provided, it should contain exactly two parts
+                               separated by a slash (/) for the two subplots.
     """
     # Open the clipped rasters
     with rio.open(raster1) as src1, rio.open(raster2) as src2:

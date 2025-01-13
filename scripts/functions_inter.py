@@ -1,6 +1,6 @@
 """
-This module contains functions for processing and analyzing Digital Elevation Models (DEMs) 
-using various geospatial libraries. The main functionalities include clipping rasters, 
+This module contains functions for processing and analyzing Digital Elevation Models (DEMs)
+using various geospatial libraries. The main functionalities include clipping rasters,
 plotting rasters, applying bitmasks, warping and calculating statistics, and handling file
 downloads and extractions. The module is designed to work with ArcticDEM data and includes
 functions for processing tile intersections, calculating statistics, and stacking arrays.
@@ -28,16 +28,15 @@ Functions:
 @dmoralpombo (based in Jade Bowling's work)
 """
 import os
-import sys
-import geopandas as gpd # type: ignore
-from shapely.geometry import Polygon, MultiPolygon # type: ignore
-from tqdm import tqdm # type: ignore
-import pandas as pd # type: ignore
+import geopandas as gpd  # type: ignore
+from shapely.geometry import Polygon, MultiPolygon  # type: ignore
+from tqdm import tqdm  # type: ignore
+import pandas as pd  # type: ignore
 import shutil
-import tarfile # type: ignore
-import gzip # type: ignore
-from concurrent.futures import ThreadPoolExecutor 
-import subprocess # type: ignore
+import tarfile  # type: ignore
+import gzip  # type: ignore
+from concurrent.futures import ThreadPoolExecutor
+import subprocess  # type: ignore
 import gc
 import configparser
 
@@ -49,6 +48,8 @@ mosaic_dem = maindir + "data/ArcticDEM/mosaic/arcticdem_mosaic_100m_v4.1_dem.tif
 res = 2
 
 ######################################################################
+
+
 def intersection(supertile, subtile, strip_index_gdf, mosaic_index_gdf, archdir):
     """
     Computes the intersection between the StripDEMs and the mosaic in a subtile.
@@ -68,10 +69,12 @@ def intersection(supertile, subtile, strip_index_gdf, mosaic_index_gdf, archdir)
 
     # Temporary files for the clipped mosaic/stripDEMs
 
-    try:
+    if "dem_id" in mosaic_index_gdf.columns:
         tile_row = mosaic_index_gdf[mosaic_index_gdf["dem_id"] == tile_id]
-    except KeyError:
+    elif "DEM_ID" in mosaic_index_gdf.columns:
         tile_row = mosaic_index_gdf[mosaic_index_gdf["DEM_ID"] == tile_id]
+    else:
+        raise KeyError("Neither 'dem_id' nor 'DEM_ID' column found in mosaic_index_gdf")
 
     if tile_row.shape[0] == 1:
         print(f"Processing tile: {tile}\n\n\n\n\n\n")
@@ -79,15 +82,14 @@ def intersection(supertile, subtile, strip_index_gdf, mosaic_index_gdf, archdir)
         # Get the bounds of the tile cell
         tile_coords = tile_row.iloc[0]["geometry"]
         tile_bounds = tile_coords.bounds
-
-        # Crop the tile bounds to avoid overlapping between tiles
-        tile_bounds_mod = (
+        modified_tile_bounds = (
             tile_bounds[0] + 100,
             tile_bounds[1] + 100,
             tile_bounds[2] - 100,
             tile_bounds[3] - 100,
         )
-        tile_bounds = tile_bounds_mod
+        tile_bounds = modified_tile_bounds
+
         #################################################################
         # This section imports the list of "intersecting" StripDEMs
         # (or creates it, if it had not been already done)
@@ -100,14 +102,17 @@ def intersection(supertile, subtile, strip_index_gdf, mosaic_index_gdf, archdir)
 
         if intersect_dems_df.empty:
             print("intersect_dems_df is empty (No StripDEMs in this tile).\nSkip")
-            return None
+            return (), (), pd.DataFrame()
         else:
             print("intersect_dems_df loaded - NOT empty")
 
     else:
         print(f"Tile {tile} not found in the mosaic index. Skipping...")
-    
-    return tile, tile_coords, tile_bounds, intersect_dems_df
+
+    return tile_coords, tile_bounds, intersect_dems_df
+
+######################################################################
+
 
 def process_tile_intersections(
     tile,
@@ -136,6 +141,10 @@ def process_tile_intersections(
         tile_row = mosaic_index_gdf[mosaic_index_gdf["dem_id"] == tile]
     else:
         raise KeyError("Neither 'tile' nor 'dem_id' column found in mosaic_index_gdf")
+
+    if tile_row.empty:
+        raise ValueError(f"Tile {tile} not found in the mosaic index.")
+
     tile_coords = tile_row.iloc[0]["geometry"]
     tile_bounds = tile_coords.bounds
     supertile = tile[:5]
@@ -153,7 +162,7 @@ def process_tile_intersections(
     if os.path.exists(intersection_df_path):
         print(f"Loading existing intersection DataFrame from:\n {intersection_df_path}")
         return pd.read_csv(intersection_df_path)
-    # else:
+
     print(f"Creating new intersection DataFrame:\n {intersection_df_path}")
 
     # Initialize variables
@@ -161,7 +170,7 @@ def process_tile_intersections(
     n_intersections = 0
 
     # Process intersections
-    for _, strip in tqdm(strip_index_gdf.iterrows(), total=strip_index_gdf.shape[0]):
+    for _, strip in tqdm(strip_index_gdf.iterrows(), total=strip_index_gdf.shape[0], mininterval=1.0):
         strip_geom = strip["geometry"]
         strip_name = strip["pairname"]
         geocell = strip["geocell"]
@@ -170,10 +179,10 @@ def process_tile_intersections(
 
         if check_intersection(strip_geom, tile_coords):
             n_intersections += 1
-            save_name = (
+            formatted_strip_name = (
                 "_".join([strip_name.split("_")[i] for i in [0, 2, 1, 3]]) + ".tif"
             )
-            lines.append([tile, strip_name, acqdate1, save_name, geocell, url])
+            lines.append([tile, strip_name, acqdate1, formatted_strip_name, geocell, url])
             handle_strip_download(geocell, url, archdir)
 
     # Create DataFrame and save results
@@ -211,7 +220,11 @@ def check_intersection_og(strip_geom, tile_coords):
         return strip_geom.intersects(tile_coords)
     elif isinstance(strip_geom, MultiPolygon):
         return any(poly.intersects(tile_coords) for poly in strip_geom.geoms)
+
     return False
+
+######################################################################
+
 
 def check_intersection(strip_geom, tile_coords, area_threshold=0.01):
     """
@@ -221,7 +234,7 @@ def check_intersection(strip_geom, tile_coords, area_threshold=0.01):
     Parameters:
         strip_geom (Polygon or MultiPolygon): Geometry of the strip.
         tile_coords (Polygon): tile cell geometry.
-        area_threshold (float): Minimum overlapping area (as a fraction of the tile area) 
+        area_threshold (float): Minimum overlapping area (as a fraction of the tile area)
                                 required to include the strip.
 
     Returns:
@@ -233,15 +246,14 @@ def check_intersection(strip_geom, tile_coords, area_threshold=0.01):
     if isinstance(strip_geom, Polygon):
         overlap_geom = strip_geom.intersection(tile_coords)
 
-        #return strip_geom.intersects(tile_coords)
     elif isinstance(strip_geom, MultiPolygon):
         overlap_geom = MultiPolygon(
             [poly.intersection(tile_coords) for poly in strip_geom.geoms]
         ).buffer(0)  # Buffer(0) fixes potential invalid geometries
-        #return any(poly.intersects(tile_coords) for poly in strip_geom.geoms)
+
     else:
         return False
-    
+
     # Calculate the overlapping area
     overlap_area = overlap_geom.area
 
@@ -270,7 +282,15 @@ def handle_strip_download(geocell, url, archdir):
     extracted_dir = os.path.join(archdir, geocell, fname[:-7])
 
     if os.path.exists(extracted_dir):
-        # print(f"Strip already extracted: {extracted_dir}")
+        # Check if the directory contains valid files
+        if any(fname.endswith('.tif') for fname in os.listdir(extracted_dir)):
+            return
+        else:
+            print(f"Directory {extracted_dir} exists but does not contain valid files. Re-extracting...")
+            shutil.rmtree(extracted_dir)
+        return
+
+    if os.path.exists(extracted_dir):
         return
 
     try:
@@ -286,7 +306,6 @@ def handle_strip_download(geocell, url, archdir):
 
     except EOFError:
         print(f"Error: Corrupted or incomplete .gz file: {extracted_dir}")
-        # Optionally, delete the corrupted file to allow re-download
         if os.path.exists(extracted_dir):
             os.remove(extracted_dir)
         print(f"Deleted corrupted file: {extracted_dir}")
@@ -341,7 +360,6 @@ def handle_tile_download(tile):
             print(f"Error extracting .gz file: {e}")
             return
 
-    # If .gz file is not found, download it
     url = f"https://data.pgc.umn.edu/elev/dem/setsm/ArcticDEM/mosaic/v4.1/2m/{supertile}/{tile_id}.tar.gz"
     print(f".gz file not found. Downloading from {url}...")
     try:
@@ -368,7 +386,6 @@ def handle_tile_download(tile):
         print(f"Error downloading file: {e}")
         return
 
-    # Extract the downloaded .gz file
     try:
         with gzip.open(tilegz_path, "rb") as f_gz_in:
             with open(tiletar_path, "wb") as f_tar_out:
@@ -398,7 +415,6 @@ def download_strips(intersect_dems_df):
     # Load the list of URLs from the CSV file
     # Column name in the CSV containing the URLs, file names and geocell
     url_column = "url"
-    # filename_column = "File_Name"
     geocell_column = "Geocell"
 
     # Create a list of URLs for files that are missing, with subfolders by geocell
@@ -408,12 +424,9 @@ def download_strips(intersect_dems_df):
         os.makedirs(
             geocell_folder, exist_ok=True
         )  # Create geocell subfolder if it doesn't exist
-        # filepath = os.path.join(geocell_folder, row[filename_column])
         unzipped_name = row[url_column].split("/")[-1]
         unzfilepath = os.path.join(geocell_folder, unzipped_name)
 
-        # Add to the missing files list if the file doesn't exist
-        # if not os.path.exists(filepath) and not os.path.exists(unzfilepath):
         if not os.path.exists(unzfilepath):
             missing_files.append((geocell_folder, row[url_column]))
 
@@ -448,6 +461,7 @@ def download_strips(intersect_dems_df):
 
 ######################################################################
 
+
 # Function to download a file using wget
 def download_file(geocell_folder, url):
     """
@@ -474,6 +488,6 @@ def download_file(geocell_folder, url):
         print(f"Failed to download: {url}, error: {e}")
         print(f"Downloaded to {geocell_folder}\n from URL {url}")
         return True
-    except subprocess.CalledProcessError as e:
-        print(f"Failed to download: {url}, error: {e}")
+    except subprocess.CalledProcessErrr as e:
+        print(f"Failed to dwnload: {url}, error: {e}")
         return False
