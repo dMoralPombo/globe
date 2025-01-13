@@ -1,4 +1,16 @@
 """
+Functions:
+    main(): The main function that runs the pipeline script. It handles user inputs, configuration, and processing of supertiles and subtiles.
+Modules:
+    gc: Garbage collection interface.
+    os: Miscellaneous operating system interfaces.
+    configuration: Function to set up the configuration for the pipeline.
+    intersection: Function to find the intersection of DEMs.
+    df_stats_calculator: Function to calculate statistics for the DEMs.
+    stackador: Function to stack DEMs based on calculated statistics.
+Usage:
+    Run this script directly to execute the pipeline. The script will prompt for user inputs to control the processing flow.
+
 This module contains the pipeline script for the project.
 
 """
