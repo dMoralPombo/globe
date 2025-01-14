@@ -102,7 +102,7 @@ def intersection(supertile, subtile, strip_index_gdf, mosaic_index_gdf, archdir)
 
         if intersect_dems_df.empty:
             print("intersect_dems_df is empty (No StripDEMs in this tile).\nSkip")
-            return (), pd.DataFrame()
+            return None, None
         else:
             print("intersect_dems_df loaded - NOT empty")
 

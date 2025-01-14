@@ -114,12 +114,14 @@ def stackador(df_stats, threshold, tile, tile_bounds):
         # Check if the ndems raster file already exists
         if os.path.exists(ndems_raster_path):
             run_stack = 'no'
+            print("ndems_raster_path already exists.")
             # run_stack = input(f"ndems_raster_path already exists. \
             #                   Do you want to overwrite it? (yes/no): ").strip().lower()
             if run_stack != 'yes':
                 print("Using the pre-existent rasters. Skipping the stacking process and proceeding to plot...")
         
         if run_stack == 'yes':
+            print("Stacking arrays...")
             # Initialize running totals
             stack(
                 stackarrays,
@@ -341,23 +343,25 @@ def plotting_rasters(tile, transform, ndems_raster_path, meandems_raster_path, s
     )
     # plot_final_raster(std_raster_path, tile, "sigma_max50", "magma", vmin=0, vmax=50)
     plt.close()
-
-    def plot_quad_subplot(raster1, raster2, raster3, raster4, titles):
+    def plot_quad_subplot(raster1, raster2, raster3, raster4, titles, tile):
         """
         Plot four rasters in a 2x2 grid within a single figure.
 
         Parameters:
         - raster1, raster2, raster3, raster4: The file paths or arrays for the rasters to be plotted.
         - titles: A list of titles for each subplot.
+        - tile: The identifier for the tile to be used as the supertitle.
 
         Returns:
         - A Matplotlib figure showing the four rasters in a 2x2 layout.
         """
-        fig, axes = plt.subplots(2, 2, figsize=(10, 10))
+        fig, axes = plt.subplots(2, 2, figsize=(14, 14))
         ax_list = axes.flatten()
 
-        for ax, raster in zip(ax_list, [raster1, raster2, raster3, raster4]):
-            title = "# DEMs"
+        # Transformer for EPSG 3413 to EPSG 4326
+        transformer = Transformer.from_crs("EPSG:3413", "EPSG:4326", always_xy=True)
+
+        for ax, raster, title in zip(ax_list, [raster1, raster2, raster3, raster4], titles):
             if title == "sigma":
                 cmap = "magma"
                 vmin, vmax = 0, 30
@@ -368,44 +372,88 @@ def plotting_rasters(tile, transform, ndems_raster_path, meandems_raster_path, s
                 cmap = "viridis"
                 vmin, vmax = None, None
             else:
-                cmap = "viridis"
+                cmap = "terrain"
                 vmin, vmax = None, None
 
-            plot_final_raster(
-                raster,
-                tile,
-                Affine(2.0, 0.0, 0.0, 0.0, -2.0, 0.0),
-                title,
-                cmap,
-                add_grid=True,
-                vmin=vmin,
-                vmax=vmax,
+            # Use the modified `plot_final_raster` to plot directly into the axis
+            with rio.open(raster) as src:
+                raster_data = src.read(1)
+                raster_data[raster_data == -9999] = np.nan  # Handle no-data values
+                left, bottom, right, top = src.bounds
+                extent = (left, right, bottom, top)
+
+                # Get primary axis ticks (EPSG 3413)
+                x_ticks = np.linspace(left, right, 6)[1:-1]  # Skip corners
+                y_ticks = np.linspace(bottom, top, 6)[1:-1]  # Skip corners
+
+                # Transform primary axis ticks to secondary system (EPSG 4326)
+                lon_ticks, _ = transformer.transform(x_ticks, [bottom] * len(x_ticks))
+                _, lat_ticks = transformer.transform([left] * len(y_ticks), y_ticks)
+
+
+            img = ax.imshow(
+                raster_data, cmap=cmap, vmin=vmin, vmax=vmax, extent=extent, origin="upper"
             )
+            ax.set_title(title, fontsize=12)
 
-        plt.tight_layout()
-        plt.show()
+            # Add primary axis labels (EPSG 3413)
+            ax.set_xticks(x_ticks)
+            ax.set_yticks(y_ticks)
+            ax.tick_params(labelsize=8)  # Reduce tick label size
+            ax.set_xlabel("X (m) - EPSG 3413")
+            ax.set_ylabel("Y (m) - EPSG 3413")
 
+            # Add secondary axes (EPSG 4326) with synchronized labels
+            secax_x = ax.secondary_xaxis("top")
+            secax_x.set_xticks(x_ticks)
+            secax_x.set_xticklabels([f"{lon:.1f}" for lon in lon_ticks])
+            secax_x.set_xlabel("Longitude (°) - EPSG 4326", fontsize=10, labelpad=6)
+            secax_x.tick_params(labelsize=8)
+
+            secax_y = ax.secondary_yaxis("right")
+            secax_y.set_yticks(y_ticks)
+            secax_y.set_yticklabels([f"{lat:.1f}" for lat in lat_ticks])
+            secax_y.set_ylabel("Latitude (°) - EPSG 4326", fontsize=10, labelpad=6, rotation=270)
+            secax_y.tick_params(labelsize=8)
+
+            # Add colorbar for each subplot
+            #cbar_ax = ax.inset_axes([1.02, 0.1, 0.03, 0.8])  # [x, y, width, height]
+            cbar = fig.colorbar(img, ax=ax, orientation="vertical", pad=0.1, fraction=0.04)
+            # cbar = fig.colorbar(img, cax=cbar_ax, orientation="vertical")
+            cbar.set_label(title, rotation=270, fontsize=10, labelpad=8)
+            cbar.ax.tick_params(labelsize=8)
+
+            # Optionally add grid or labels
+            ax.set_xlabel("X (m) - EPSG 3413")
+            ax.set_ylabel("Y (m) - EPSG 3413")
+
+        # Add a supertitle with the tile name
+        fig.suptitle(f"Tile: {tile}", fontsize=18, fontweight="bold", y=0.94)
+        plt.tight_layout(rect=[0, 0, 1, 0.98])  # Adjust layout to make room for supertitle
+        
         # Create output directories if they don't exist
         image_dir = os.path.join(
-            maindir,
-            f"data/ArcticDEM/ArcticDEM_stripfiles/{tile[:5]}/images",
+            maindir, f"data/ArcticDEM/ArcticDEM_stripfiles/{tile[:5]}/images"
         )
+        create_directory_if_not_exists(image_dir)
 
-        if not os.path.exists(image_dir):
-            create_directory_if_not_exists(image_dir)
         # Save the PNG image
-        quad_save_path = os.path.join(image_dir, f"tile_quad_{tile}.png")
-        plt.savefig(quad_save_path, dpi=700)
+        quad_save_path = os.path.join(image_dir, f"quad_{tile}.png")
+        plt.savefig(quad_save_path, dpi=500)
+        print(f"Quad image saved at {quad_save_path}.")
+        plt.show()
 
+    print("Plotting quadruple figure (final)...")
     # Example usage:
     plot_quad_subplot(
         raster1=meandems_raster_path,
         raster2=ndems_raster_path,
         raster3=std_raster_path,
         raster4=std_raster_path,
-        titles=["Mean elev.", "# DEMs", "sigma", "sigma"]
+        titles=["Mean elev.", "# DEMs", "sigma", "sigma"],
+        tile=tile,
     )
-
+    plt.close()
 
 
 #########################################################
@@ -539,13 +587,16 @@ def plot_final_raster(
         # Add secondary axes (EPSG 4326) with synchronized labels
         secax_x = ax.secondary_xaxis("top")
         secax_x.set_xticks(x_ticks)
+        ax.tick_params(labelsize=7)  # Reduce tick label size
         secax_x.set_xticklabels([f"{lon:.1f}" for lon in lon_ticks])
         secax_x.set_xlabel("Longitude (°) - EPSG 4326", labelpad=12)
+        secax_x.tick_params(labelsize=7)  # Reduce tick label size
 
         secax_y = ax.secondary_yaxis("right")
         secax_y.set_yticks(y_ticks)
         secax_y.set_yticklabels([f"{lat:.1f}" for lat in lat_ticks])
         secax_y.set_ylabel("Latitude (°) - EPSG 4326", labelpad=10, rotation=270)
+        secax_y.tick_params(labelsize=7)  # Reduce tick label size
 
         # Add grid if requested
         if add_grid:
@@ -554,7 +605,7 @@ def plot_final_raster(
             )
 
         # Add colorbar
-        cbar = fig.colorbar(img, ax=ax, orientation="vertical", pad=0.02, fraction=0.046)
+        cbar = fig.colorbar(img, ax=ax, orientation="vertical", pad=0.1, fraction=0.046)
         cbar.set_label(cbar_title, labelpad=12, rotation=270)
 
         plt.tight_layout()

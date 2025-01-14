@@ -34,8 +34,8 @@ from scripts.functions_stack import *
 
 def main():
     download_only = not bool(input("Download only? (Enter for YES)   "))
-    maindir, archdir, res, diffndv, strip_index_gdf, mosaic_index_gdf, stats_columns = configuration()
     supertiles = input("Enter the supertile(s) to process (e.g. '15_38, 16_38'): ").split(",")
+    maindir, archdir, res, diffndv, strip_index_gdf, mosaic_index_gdf, stats_columns = configuration()
     supertiles = [supertile.strip() for supertile in supertiles]
     subtiles = ["1_1", "1_2", "2_1", "2_2"]
     try:
@@ -64,6 +64,7 @@ def main():
 
             # Calculate statistics for the DEMs, if download_only is False
             if download_only is False:
+                # Calculate statistics for the DEMs
                 df_stats = df_stats_calculator(supertile,
                                                subtile,
                                                tile_bounds,
@@ -72,6 +73,7 @@ def main():
                                                strips_dir,
                                                stats_columns)
 
+                # Stack the DEMs based on the calculated statistics and obtain final rasters
                 stackador(df_stats, threshold, tile, tile_bounds)
                 print("\n\n\nStack run. Proceeding to next tile...\n\n\n")
                 gc.collect()
