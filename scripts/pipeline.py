@@ -22,10 +22,14 @@ import os
 os.chdir("/media/luna/moralpom/globe/github_ready/globe")
 
 # from scripts.functions_all import *
-from scripts.functions_config import configuration
-from scripts.functions_inter import intersection
-from scripts.functions_stats import df_stats_calculator
-from scripts.functions_stack import stackador
+# from scripts.functions_config import configuration
+# from scripts.functions_inter import intersection
+# from scripts.functions_stats import df_stats_calculator
+# from scripts.functions_stack import stackador
+from scripts.functions_config import *
+from scripts.functions_inter import *
+from scripts.functions_stats import *
+from scripts.functions_stack import *
 
 
 def main():

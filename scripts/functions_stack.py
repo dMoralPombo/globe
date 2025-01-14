@@ -94,11 +94,50 @@ def stackador(df_stats, threshold, tile, tile_bounds):
     ]
 
     if stackarrays:
-        stack(
-            stackarrays,
+        # Get the tile bounds (x0, y0, x1, y1)
+        x0, y0, x1, y1 = tile_bounds
+
+        # Pre-calculate affine transformation
+        transform = Affine(2.0, 0.0, x0, 0.0, -2.0, y1)
+
+        # Paths for saving outputs
+        resultsdir = os.path.join(
+            maindir,
+            f"data/ArcticDEM/ArcticDEM_stripfiles/{tile[:5]}/arrays/",
+        )
+        create_directory_if_not_exists(resultsdir)
+        ndems_raster_path = os.path.join(resultsdir, f"{tile}_20_ndems.tif")
+        meandems_raster_path = os.path.join(resultsdir, f"{tile}_20_mean.tif")
+        std_raster_path = os.path.join(resultsdir, f"{tile}_20_stdev.tif")
+
+        run_stack = 'yes'
+        # Check if the ndems raster file already exists
+        if os.path.exists(ndems_raster_path):
+            run_stack = 'no'
+            # run_stack = input(f"ndems_raster_path already exists. \
+            #                   Do you want to overwrite it? (yes/no): ").strip().lower()
+            if run_stack != 'yes':
+                print("Using the pre-existent rasters. Skipping the stacking process and proceeding to plot...")
+        
+        if run_stack == 'yes':
+            # Initialize running totals
+            stack(
+                stackarrays,
+                tile,
+                tile_bounds,
+                transform,
+                ndems_raster_path,
+                meandems_raster_path,
+                std_raster_path,
+                plot_every_n='no',  # Plot one out of every N DEMs
+            )
+        
+        plotting_rasters(
             tile,
-            tile_bounds,
-            "no",
+            transform,
+            ndems_raster_path,
+            meandems_raster_path,
+            std_raster_path
         )
     else:
         print("stackarrays is empty")
@@ -110,8 +149,11 @@ def stack(
     stackarrays,
     tile,
     tile_bounds,
-    plot_every_n,  # Plot one out of every N DEMs
-    # transform=None,
+    transform,
+    ndems_raster_path,
+    meandems_raster_path,
+    std_raster_path,
+    plot_every_n='no',  # Plot one out of every N DEMs
 ):
     """
     This is a function to handle the processing of the last part of the pipeline,
@@ -120,34 +162,17 @@ def stack(
     Args:
         stackarrays (list): list including the (temporary) arrays stored as npy files
         tile (str): id of the tile.
-        tile_bounds (tuple): Bounds of the tile in the format (x0, y0, x1, y1).
+        tile_bounds (tuple): bounds of the tile.
+        ndems_raster_path (str): path to save the nDEMs raster.
+        meandems_raster_path (str): path to save the mean elevation raster.
+        std_raster_path (str): path to save the standard deviation raster.
         plot_every_n (int, optional): frequency of plotting. Defaults to 10.
     """
-    # Get the tile bounds (x0, y0, x1, y1)
-    x0, y0, x1, y1 = tile_bounds
-
-    # Generate the extent (coordinates for the axes)
-    extent = [x0, y0, x1, y1]
-
-    # Pre-calculate affine transformation
-    transform = Affine(2.0, 0.0, x0, 0.0, -2.0, y1)
 
     cellshape = (25000, 25000)
 
-    if not stackarrays:
-        print("Array is empty")
-        return
-
-    # Paths for saving outputs
-    resultsdir = os.path.join(
-        maindir,
-        f"data/ArcticDEM/ArcticDEM_stripfiles/{tile[:5]}/arrays/",
-    )
-    create_directory_if_not_exists(resultsdir)
-
-    ndems_raster_path = os.path.join(resultsdir, f"{tile}_20_ndems.tif")
-    meandems_raster_path = os.path.join(resultsdir, f"{tile}_20_mean.tif")
-    std_raster_path = os.path.join(resultsdir, f"{tile}_20_stdev.tif")
+    # Generate the extent (coordinates for the axes)
+    extent = list(tile_bounds)
 
     # Initialize running totals
     running_sum, running_squared_sum, valid_count = initialise_running_totals(cellshape)
@@ -238,6 +263,38 @@ def stack(
     save_raster(sigma, std_raster_path, transform)
     print("mean, ndems and sigma rasters saved.")
 
+    # Clear arrays from memory
+    del stackarrays, running_sum, running_squared_sum, valid_count, mean_dems
+    del sigma, extent, transform
+
+######################################################################
+
+
+def plotting_rasters(tile, transform, ndems_raster_path, meandems_raster_path, std_raster_path):
+    """
+    Plots various raster images for a given tile using predefined raster paths and transformations.
+    - tile (str): The identifier for the tile to be plotted.
+    The function performs the following steps:
+    1. Plots the 'ndems' raster using the 'viridis' colormap and adds a grid.
+    2. Plots the 'meanelev' raster using the 'terrain' colormap.
+    3. Plots the 'sigma' raster using the 'magma' colormap with value limits between 0 and 20.
+    4. Plots the 'sigma' raster again using the 'magma' colormap with value limits between 0 and 50.
+    5. Defines and calls a nested function `plot_quad_subplot` to plot four rasters in a 2x2 grid layout.
+    6. Clears specific arrays from memory to free up resources.
+    Note:
+    - The function assumes the existence of certain global variables such as `ndems_raster_path`, `meandems_raster_path`, `std_raster_path`, `transform`, and `maindir`.
+    - The nested function `plot_quad_subplot` is used to create a 2x2 subplot of rasters and save the resulting figure as a PNG image.
+
+    Args:
+    - tile (str): The identifier for the tile to be plotted.
+    - transform (Affine): The affine transformation for the raster.
+    - ndems_raster_path (str): The file path for the 'ndems' raster.
+    - meandems_raster_path (str): The file path for the 'meanelev' raster.
+    - std_raster_path (str): The file path for the 'sigma' raster.
+
+    Returns:
+    - None: The function saves the resulting PNG images and does not return any values.
+    """
     # Plot the rasters
     plot_final_raster(
         ndems_raster_path,
@@ -349,9 +406,7 @@ def stack(
         titles=["Mean elev.", "# DEMs", "sigma", "sigma"]
     )
 
-    # Clear arrays from memory
-    del stackarrays, running_sum, running_squared_sum, valid_count, mean_dems
-    del sigma, extent, transform
+
 
 #########################################################
 
@@ -499,7 +554,7 @@ def plot_final_raster(
             )
 
         # Add colorbar
-        cbar = fig.colorbar(img, ax=ax, orientation="vertical", pad=0.15)
+        cbar = fig.colorbar(img, ax=ax, orientation="vertical", pad=0.02, fraction=0.046)
         cbar.set_label(cbar_title, labelpad=12, rotation=270)
 
         plt.tight_layout()
