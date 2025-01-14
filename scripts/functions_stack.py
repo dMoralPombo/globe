@@ -407,20 +407,20 @@ def plotting_rasters(tile, transform, ndems_raster_path, meandems_raster_path, s
             secax_x = ax.secondary_xaxis("top")
             secax_x.set_xticks(x_ticks)
             secax_x.set_xticklabels([f"{lon:.1f}" for lon in lon_ticks])
-            secax_x.set_xlabel("Longitude (°) - EPSG 4326", fontsize=10, labelpad=6)
+            secax_x.set_xlabel("Longitude (°) - EPSG 4326", fontsize=10, labelpad=8)
             secax_x.tick_params(labelsize=8)
 
             secax_y = ax.secondary_yaxis("right")
             secax_y.set_yticks(y_ticks)
             secax_y.set_yticklabels([f"{lat:.1f}" for lat in lat_ticks])
-            secax_y.set_ylabel("Latitude (°) - EPSG 4326", fontsize=10, labelpad=6, rotation=270)
+            secax_y.set_ylabel("Latitude (°) - EPSG 4326", fontsize=10, labelpad=8, rotation=270)
             secax_y.tick_params(labelsize=8)
 
             # Add colorbar for each subplot
             #cbar_ax = ax.inset_axes([1.02, 0.1, 0.03, 0.8])  # [x, y, width, height]
             cbar = fig.colorbar(img, ax=ax, orientation="vertical", pad=0.1, fraction=0.04)
             # cbar = fig.colorbar(img, cax=cbar_ax, orientation="vertical")
-            cbar.set_label(title, rotation=270, fontsize=10, labelpad=8)
+            cbar.set_label(title, rotation=270, fontsize=10, labelpad=10)
             cbar.ax.tick_params(labelsize=8)
 
             # Optionally add grid or labels
